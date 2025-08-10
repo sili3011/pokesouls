@@ -5,8 +5,10 @@
 #include "item.h"
 #include "item_icon.h"
 #include "malloc.h"
+#include "palette.h"
 #include "move.h"
 #include "sprite.h"
+#include "window.h"
 #include "constants/items.h"
 
 // EWRAM vars
@@ -17,42 +19,39 @@ EWRAM_DATA u8 *gItemIcon4x4Buffer = NULL;
 #include "data/item_icon_table.h"
 
 static const struct OamData sOamData_ItemIcon =
-{
-    .y = 0,
-    .affineMode = ST_OAM_AFFINE_OFF,
-    .objMode = ST_OAM_OBJ_NORMAL,
-    .mosaic = FALSE,
-    .bpp = ST_OAM_4BPP,
-    .shape = SPRITE_SHAPE(32x32),
-    .x = 0,
-    .matrixNum = 0,
-    .size = SPRITE_SIZE(32x32),
-    .tileNum = 0,
-    .priority = 1,
-    .paletteNum = 2,
-    .affineParam = 0
-};
+    {
+        .y = 0,
+        .affineMode = ST_OAM_AFFINE_OFF,
+        .objMode = ST_OAM_OBJ_NORMAL,
+        .mosaic = FALSE,
+        .bpp = ST_OAM_4BPP,
+        .shape = SPRITE_SHAPE(32x32),
+        .x = 0,
+        .matrixNum = 0,
+        .size = SPRITE_SIZE(32x32),
+        .tileNum = 0,
+        .priority = 1,
+        .paletteNum = 2,
+        .affineParam = 0};
 
 static const union AnimCmd sSpriteAnim_ItemIcon[] =
-{
-    ANIMCMD_FRAME(0, 0),
-    ANIMCMD_END
-};
+    {
+        ANIMCMD_FRAME(0, 0),
+        ANIMCMD_END};
 
 static const union AnimCmd *const sSpriteAnimTable_ItemIcon[] =
-{
-    sSpriteAnim_ItemIcon
-};
+    {
+        sSpriteAnim_ItemIcon};
 
 const struct SpriteTemplate gItemIconSpriteTemplate =
-{
-    .tileTag = 0,
-    .paletteTag = 0,
-    .oam = &sOamData_ItemIcon,
-    .anims = sSpriteAnimTable_ItemIcon,
-    .images = NULL,
-    .affineAnims = gDummySpriteAffineAnimTable,
-    .callback = SpriteCallbackDummy,
+    {
+        .tileTag = 0,
+        .paletteTag = 0,
+        .oam = &sOamData_ItemIcon,
+        .anims = sSpriteAnimTable_ItemIcon,
+        .images = NULL,
+        .affineAnims = gDummySpriteAffineAnimTable,
+        .callback = SpriteCallbackDummy,
 };
 
 // code
@@ -121,6 +120,30 @@ u8 AddItemIconSprite(u16 tilesTag, u16 paletteTag, u16 itemId)
 
         return spriteId;
     }
+}
+
+u8 BlitItemIconToWindow(u16 itemId, u8 windowId, u16 x, u16 y, void *paletteDest)
+{
+    if (!AllocItemIconTemporaryBuffers())
+        return 16;
+
+    LZDecompressWram(GetItemIconPicOrPalette(itemId, 0), gItemIconDecompressionBuffer);
+    CopyItemIconPicTo4x4Buffer(gItemIconDecompressionBuffer, gItemIcon4x4Buffer);
+    BlitBitmapToWindow(windowId, gItemIcon4x4Buffer, x, y, 32, 32);
+
+    // if paletteDest is nonzero, copies the decompressed palette directly into it
+    // otherwise, loads the compressed palette into the windowId's BG palette ID
+    if (paletteDest)
+    {
+        LZDecompressWram(GetItemIconPicOrPalette(itemId, 1), gPaletteDecompressionBuffer);
+        CpuFastCopy(gPaletteDecompressionBuffer, paletteDest, PLTT_SIZE_4BPP);
+    }
+    else
+    {
+        LoadCompressedPalette(GetItemIconPicOrPalette(itemId, 1), BG_PLTT_ID(gWindows[windowId].window.paletteNum), PLTT_SIZE_4BPP);
+    }
+    FreeItemIconTemporaryBuffers();
+    return 0;
 }
 
 u8 AddCustomItemIconSprite(const struct SpriteTemplate *customSpriteTemplate, u16 tilesTag, u16 paletteTag, u16 itemId)
