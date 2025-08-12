@@ -24,9 +24,11 @@
 #include "load_save.h"
 #include "list_menu.h"
 #include "main.h"
+#include "money.h"
 #include "mystery_gift.h"
 #include "match_call.h"
 #include "menu.h"
+#include "menu_helpers.h"
 #include "overworld.h"
 #include "party_menu.h"
 #include "pokeblock.h"
@@ -49,6 +51,8 @@
 #include "tv.h"
 #include "wallclock.h"
 #include "window.h"
+#include "bg.h"
+#include "gpu_regs.h"
 #include "constants/battle_frontier.h"
 #include "constants/battle_pyramid.h"
 #include "constants/battle_tower.h"
@@ -78,9 +82,9 @@
 #define GFXTAG_MULTICHOICE_SCROLL_ARROWS 2000
 #define PALTAG_MULTICHOICE_SCROLL_ARROWS 100
 
-#define ELEVATOR_WINDOW_WIDTH  3
+#define ELEVATOR_WINDOW_WIDTH 3
 #define ELEVATOR_WINDOW_HEIGHT 3
-#define ELEVATOR_LIGHT_STAGES  3
+#define ELEVATOR_LIGHT_STAGES 3
 
 EWRAM_DATA bool8 gBikeCyclingChallenge = FALSE;
 EWRAM_DATA u8 gBikeCollisions = 0;
@@ -148,7 +152,7 @@ static u16 PlayerGainRandomTrainerFan(void);
 static void BufferFanClubTrainerName_(struct LinkBattleRecords *, u8, u8);
 #else
 static void BufferFanClubTrainerName_(u8 whichLinkTrainer, u8 whichNPCTrainer);
-#endif //FREE_LINK_BATTLE_RECORDS
+#endif // FREE_LINK_BATTLE_RECORDS
 
 static const u8 sText_BigGuy[] = _("Big guy");
 static const u8 sText_BigGirl[] = _("Big girl");
@@ -522,14 +526,12 @@ void SpawnLinkPartnerObjectEvent(void)
         MOVEMENT_TYPE_FACE_UP,
         MOVEMENT_TYPE_FACE_LEFT,
         MOVEMENT_TYPE_FACE_DOWN,
-        MOVEMENT_TYPE_FACE_RIGHT
-    };
+        MOVEMENT_TYPE_FACE_RIGHT};
     s8 coordOffsets[][2] = {
-        { 0,  1},
-        { 1,  0},
-        { 0, -1},
-        {-1,  0}
-    };
+        {0, 1},
+        {1, 0},
+        {0, -1},
+        {-1, 0}};
     u8 myLinkPlayerNumber;
     u8 playerFacingDirection;
     u8 linkSpriteId;
@@ -630,12 +632,11 @@ static void LoadLinkPartnerObjectEventSpritePalette(u16 graphicsId, u8 localEven
 }
 
 static const struct UCoords8 sMauvilleGymSwitchCoords[] =
-{
-    { 0 + MAP_OFFSET, 15 + MAP_OFFSET},
-    { 4 + MAP_OFFSET, 12 + MAP_OFFSET},
-    { 3 + MAP_OFFSET,  9 + MAP_OFFSET},
-    { 8 + MAP_OFFSET,  9 + MAP_OFFSET}
-};
+    {
+        {0 + MAP_OFFSET, 15 + MAP_OFFSET},
+        {4 + MAP_OFFSET, 12 + MAP_OFFSET},
+        {3 + MAP_OFFSET, 9 + MAP_OFFSET},
+        {8 + MAP_OFFSET, 9 + MAP_OFFSET}};
 
 // Presses the stepped-on switch and raises the rest
 void MauvilleGymPressSwitch(void)
@@ -989,11 +990,7 @@ static bool32 IsBuildingPCTile(u32 tileId)
 
 static bool32 IsPlayerHousePCTile(u32 tileId)
 {
-    return gMapHeader.mapLayout->secondaryTileset == &gTileset_BrendansMaysHouse
-        && (tileId == METATILE_BrendansMaysHouse_BrendanPC_On
-            || tileId == METATILE_BrendansMaysHouse_BrendanPC_Off
-            || tileId == METATILE_BrendansMaysHouse_MayPC_On
-            || tileId == METATILE_BrendansMaysHouse_MayPC_Off);
+    return gMapHeader.mapLayout->secondaryTileset == &gTileset_BrendansMaysHouse && (tileId == METATILE_BrendansMaysHouse_BrendanPC_On || tileId == METATILE_BrendansMaysHouse_BrendanPC_Off || tileId == METATILE_BrendansMaysHouse_MayPC_On || tileId == METATILE_BrendansMaysHouse_MayPC_Off);
 }
 
 static bool8 IsPlayerInFrontOfPC(void)
@@ -1008,11 +1005,11 @@ static bool8 IsPlayerInFrontOfPC(void)
 }
 
 // Task data for Task_PCTurnOnEffect and Task_LotteryCornerComputerEffect
-#define tPaused       data[0] // Never set
-#define tTaskId       data[1]
+#define tPaused data[0] // Never set
+#define tTaskId data[1]
 #define tFlickerCount data[2]
-#define tTimer        data[3]
-#define tIsScreenOn   data[4]
+#define tTimer data[3]
+#define tIsScreenOn data[4]
 
 // For this special, gSpecialVar_0x8004 is expected to be some PC_LOCATION_* value.
 void DoPCTurnOnEffect(void)
@@ -1336,8 +1333,7 @@ u16 GetSlotMachineId(void)
         SLOT_MACHINE_LUCKY,
         SLOT_MACHINE_LUCKIER,
         SLOT_MACHINE_LUCKIER,
-        SLOT_MACHINE_LUCKIEST
-    };
+        SLOT_MACHINE_LUCKIEST};
     static const u8 sSlotMachineServiceDayIds[SLOT_MACHINE_COUNT] = {
         SLOT_MACHINE_LUCKY,
         SLOT_MACHINE_LUCKY,
@@ -1350,8 +1346,7 @@ u16 GetSlotMachineId(void)
         SLOT_MACHINE_LUCKIER,
         SLOT_MACHINE_LUCKIER,
         SLOT_MACHINE_LUCKIEST,
-        SLOT_MACHINE_LUCKIEST
-    };
+        SLOT_MACHINE_LUCKIEST};
 
     u32 rnd = gSaveBlock1Ptr->dewfordTrends[0].trendiness + gSaveBlock1Ptr->dewfordTrends[0].rand + sSlotMachineRandomSeeds[gSpecialVar_0x8004];
     if (IsPokeNewsActive(POKENEWS_GAME_CORNER))
@@ -1432,9 +1427,7 @@ bool8 Special_AreLeadMonEVsMaxedOut(void)
 
 u8 TryUpdateRusturfTunnelState(void)
 {
-    if (!FlagGet(FLAG_RUSTURF_TUNNEL_OPENED)
-        && gSaveBlock1Ptr->location.mapGroup == MAP_GROUP(MAP_RUSTURF_TUNNEL)
-        && gSaveBlock1Ptr->location.mapNum == MAP_NUM(MAP_RUSTURF_TUNNEL))
+    if (!FlagGet(FLAG_RUSTURF_TUNNEL_OPENED) && gSaveBlock1Ptr->location.mapGroup == MAP_GROUP(MAP_RUSTURF_TUNNEL) && gSaveBlock1Ptr->location.mapNum == MAP_NUM(MAP_RUSTURF_TUNNEL))
     {
         if (FlagGet(FLAG_HIDE_RUSTURF_TUNNEL_ROCK_1))
         {
@@ -1496,11 +1489,11 @@ bool8 IsPokerusInParty(void)
 }
 
 // Task data for Task_ShakeCamera
-#define tHorizontalPan  data[0]
-#define tDelayCounter   data[1]
-#define tNumShakes      data[2]
-#define tDelay          data[3]
-#define tVerticalPan    data[4]
+#define tHorizontalPan data[0]
+#define tDelayCounter data[1]
+#define tNumShakes data[2]
+#define tDelay data[3]
+#define tVerticalPan data[4]
 
 void ShakeCamera(void)
 {
@@ -1569,8 +1562,7 @@ u8 GetLeadMonIndex(void)
     u8 partyCount = CalculatePlayerPartyCount();
     for (i = 0; i < partyCount; i++)
     {
-        if (GetMonData(&gPlayerParty[i], MON_DATA_SPECIES_OR_EGG, NULL) != SPECIES_EGG
-         && GetMonData(&gPlayerParty[i], MON_DATA_SPECIES_OR_EGG, NULL) != SPECIES_NONE)
+        if (GetMonData(&gPlayerParty[i], MON_DATA_SPECIES_OR_EGG, NULL) != SPECIES_EGG && GetMonData(&gPlayerParty[i], MON_DATA_SPECIES_OR_EGG, NULL) != SPECIES_NONE)
             return i;
     }
     return 0;
@@ -1584,7 +1576,7 @@ u16 ScriptGetPartyMonSpecies(void)
 // Removed for Emerald
 void TryInitBattleTowerAwardManObjectEvent(void)
 {
-    //TryInitLocalObjectEvent(6);
+    // TryInitLocalObjectEvent(6);
 }
 
 u16 GetDaysUntilPacifidlogTMAvailable(void)
@@ -1697,8 +1689,7 @@ bool8 IsBadEggInParty(void)
 
 bool8 InMultiPartnerRoom(void)
 {
-    if (gSaveBlock1Ptr->location.mapGroup == MAP_GROUP(MAP_BATTLE_FRONTIER_BATTLE_TOWER_MULTI_PARTNER_ROOM)
-        && gSaveBlock1Ptr->location.mapNum == MAP_NUM(MAP_BATTLE_FRONTIER_BATTLE_TOWER_MULTI_PARTNER_ROOM) &&
+    if (gSaveBlock1Ptr->location.mapGroup == MAP_GROUP(MAP_BATTLE_FRONTIER_BATTLE_TOWER_MULTI_PARTNER_ROOM) && gSaveBlock1Ptr->location.mapNum == MAP_NUM(MAP_BATTLE_FRONTIER_BATTLE_TOWER_MULTI_PARTNER_ROOM) &&
         VarGet(VAR_FRONTIER_BATTLE_MODE) == FRONTIER_MODE_MULTIS)
         return TRUE;
     return FALSE;
@@ -1711,72 +1702,59 @@ void OffsetCameraForBattle(void)
 }
 
 static const struct WindowTemplate sWindowTemplate_ElevatorFloor =
-{
-    .bg = 0,
-    .tilemapLeft = 21,
-    .tilemapTop = 1,
-    .width = 8,
-    .height = 4,
-    .paletteNum = 15,
-    .baseBlock = 8,
+    {
+        .bg = 0,
+        .tilemapLeft = 21,
+        .tilemapTop = 1,
+        .width = 8,
+        .height = 4,
+        .paletteNum = 15,
+        .baseBlock = 8,
 };
 
 static const u8 *const sDeptStoreFloorNames[] =
-{
-    [DEPT_STORE_FLOORNUM_B4F] = gText_B4F,
-    [DEPT_STORE_FLOORNUM_B3F] = gText_B3F,
-    [DEPT_STORE_FLOORNUM_B2F] = gText_B2F,
-    [DEPT_STORE_FLOORNUM_B1F] = gText_B1F,
-    [DEPT_STORE_FLOORNUM_1F] = gText_1F,
-    [DEPT_STORE_FLOORNUM_2F] = gText_2F,
-    [DEPT_STORE_FLOORNUM_3F] = gText_3F,
-    [DEPT_STORE_FLOORNUM_4F] = gText_4F,
-    [DEPT_STORE_FLOORNUM_5F] = gText_5F,
-    [DEPT_STORE_FLOORNUM_6F] = gText_6F,
-    [DEPT_STORE_FLOORNUM_7F] = gText_7F,
-    [DEPT_STORE_FLOORNUM_8F] = gText_8F,
-    [DEPT_STORE_FLOORNUM_9F] = gText_9F,
-    [DEPT_STORE_FLOORNUM_10F] = gText_10F,
-    [DEPT_STORE_FLOORNUM_11F] = gText_11F,
-    [DEPT_STORE_FLOORNUM_ROOFTOP] = gText_Rooftop
-};
+    {
+        [DEPT_STORE_FLOORNUM_B4F] = gText_B4F,
+        [DEPT_STORE_FLOORNUM_B3F] = gText_B3F,
+        [DEPT_STORE_FLOORNUM_B2F] = gText_B2F,
+        [DEPT_STORE_FLOORNUM_B1F] = gText_B1F,
+        [DEPT_STORE_FLOORNUM_1F] = gText_1F,
+        [DEPT_STORE_FLOORNUM_2F] = gText_2F,
+        [DEPT_STORE_FLOORNUM_3F] = gText_3F,
+        [DEPT_STORE_FLOORNUM_4F] = gText_4F,
+        [DEPT_STORE_FLOORNUM_5F] = gText_5F,
+        [DEPT_STORE_FLOORNUM_6F] = gText_6F,
+        [DEPT_STORE_FLOORNUM_7F] = gText_7F,
+        [DEPT_STORE_FLOORNUM_8F] = gText_8F,
+        [DEPT_STORE_FLOORNUM_9F] = gText_9F,
+        [DEPT_STORE_FLOORNUM_10F] = gText_10F,
+        [DEPT_STORE_FLOORNUM_11F] = gText_11F,
+        [DEPT_STORE_FLOORNUM_ROOFTOP] = gText_Rooftop};
 
 static const u16 sElevatorWindowTiles_Ascending[ELEVATOR_WINDOW_HEIGHT][ELEVATOR_LIGHT_STAGES] =
-{
     {
-        METATILE_BattleFrontier_Elevator_Top0,
-        METATILE_BattleFrontier_Elevator_Top1,
-        METATILE_BattleFrontier_Elevator_Top2
-    },
-    {
-        METATILE_BattleFrontier_Elevator_Mid0,
-        METATILE_BattleFrontier_Elevator_Mid1,
-        METATILE_BattleFrontier_Elevator_Mid2
-    },
-    {
-        METATILE_BattleFrontier_Elevator_Bottom0,
-        METATILE_BattleFrontier_Elevator_Bottom1,
-        METATILE_BattleFrontier_Elevator_Bottom2
-    },
+        {METATILE_BattleFrontier_Elevator_Top0,
+         METATILE_BattleFrontier_Elevator_Top1,
+         METATILE_BattleFrontier_Elevator_Top2},
+        {METATILE_BattleFrontier_Elevator_Mid0,
+         METATILE_BattleFrontier_Elevator_Mid1,
+         METATILE_BattleFrontier_Elevator_Mid2},
+        {METATILE_BattleFrontier_Elevator_Bottom0,
+         METATILE_BattleFrontier_Elevator_Bottom1,
+         METATILE_BattleFrontier_Elevator_Bottom2},
 };
 
 static const u16 sElevatorWindowTiles_Descending[ELEVATOR_WINDOW_HEIGHT][ELEVATOR_LIGHT_STAGES] =
-{
     {
-        METATILE_BattleFrontier_Elevator_Top0,
-        METATILE_BattleFrontier_Elevator_Top2,
-        METATILE_BattleFrontier_Elevator_Top1
-    },
-    {
-        METATILE_BattleFrontier_Elevator_Mid0,
-        METATILE_BattleFrontier_Elevator_Mid2,
-        METATILE_BattleFrontier_Elevator_Mid1
-    },
-    {
-        METATILE_BattleFrontier_Elevator_Bottom0,
-        METATILE_BattleFrontier_Elevator_Bottom2,
-        METATILE_BattleFrontier_Elevator_Bottom1
-    },
+        {METATILE_BattleFrontier_Elevator_Top0,
+         METATILE_BattleFrontier_Elevator_Top2,
+         METATILE_BattleFrontier_Elevator_Top1},
+        {METATILE_BattleFrontier_Elevator_Mid0,
+         METATILE_BattleFrontier_Elevator_Mid2,
+         METATILE_BattleFrontier_Elevator_Mid1},
+        {METATILE_BattleFrontier_Elevator_Bottom0,
+         METATILE_BattleFrontier_Elevator_Bottom2,
+         METATILE_BattleFrontier_Elevator_Bottom1},
 };
 
 void SetDeptStoreFloor(void)
@@ -1845,11 +1823,11 @@ u16 GetDeptStoreDefaultFloorChoice(void)
 }
 
 // Task data for Task_MoveElevator
-#define tTimer       data[1]
+#define tTimer data[1]
 #define tMoveCounter data[2]
 #define tVerticalPan data[4]
-#define tTotalMoves  data[5]
-#define tDescending  data[6]
+#define tTotalMoves data[5]
+#define tDescending data[6]
 
 // The maximum considered difference between floors.
 // Elevator trips with a larger difference are treated the same
@@ -1860,7 +1838,7 @@ u16 GetDeptStoreDefaultFloorChoice(void)
 // gSpecialVar_0x8006 is expected to be the destination floor number.
 void MoveElevator(void)
 {
-    static const u8 sElevatorTripLength[MAX_ELEVATOR_TRIP] = { 8, 16, 24, 32, 38, 46, 52, 56, 57 };
+    static const u8 sElevatorTripLength[MAX_ELEVATOR_TRIP] = {8, 16, 24, 32, 38, 46, 52, 56, 57};
 
     s16 *data = gTasks[CreateTask(Task_MoveElevator, 9)].data;
     u16 floorDelta;
@@ -1943,13 +1921,13 @@ void CloseDeptStoreElevatorWindow(void)
 
 // Task data for Task_MoveElevatorWindowLights
 #define tMoveCounter data[0]
-#define tTimer       data[1]
-#define tDescending  data[2]
-#define tTotalMoves  data[3]
+#define tTimer data[1]
+#define tDescending data[2]
+#define tTotalMoves data[3]
 
 static void MoveElevatorWindowLights(u16 floorDelta, bool8 descending)
 {
-    static const u8 sElevatorLightCycles[MAX_ELEVATOR_TRIP] = { 3, 6, 9, 12, 15, 18, 21, 24, 27 };
+    static const u8 sElevatorLightCycles[MAX_ELEVATOR_TRIP] = {3, 6, 9, 12, 15, 18, 21, 24, 27};
 
     if (FuncIsActiveTask(Task_MoveElevatorWindowLights) != TRUE)
     {
@@ -2043,27 +2021,26 @@ void BufferVarsForIVRater(void)
 bool8 UsedPokemonCenterWarp(void)
 {
     static const u16 sPokemonCenters[] =
-    {
-        MAP_OLDALE_TOWN_POKEMON_CENTER_1F,
-        MAP_DEWFORD_TOWN_POKEMON_CENTER_1F,
-        MAP_LAVARIDGE_TOWN_POKEMON_CENTER_1F,
-        MAP_FALLARBOR_TOWN_POKEMON_CENTER_1F,
-        MAP_VERDANTURF_TOWN_POKEMON_CENTER_1F,
-        MAP_PACIFIDLOG_TOWN_POKEMON_CENTER_1F,
-        MAP_PETALBURG_CITY_POKEMON_CENTER_1F,
-        MAP_SLATEPORT_CITY_POKEMON_CENTER_1F,
-        MAP_MAUVILLE_CITY_POKEMON_CENTER_1F,
-        MAP_RUSTBORO_CITY_POKEMON_CENTER_1F,
-        MAP_FORTREE_CITY_POKEMON_CENTER_1F,
-        MAP_LILYCOVE_CITY_POKEMON_CENTER_1F,
-        MAP_MOSSDEEP_CITY_POKEMON_CENTER_1F,
-        MAP_SOOTOPOLIS_CITY_POKEMON_CENTER_1F,
-        MAP_EVER_GRANDE_CITY_POKEMON_CENTER_1F,
-        MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F,
-        MAP_BATTLE_FRONTIER_POKEMON_CENTER_1F,
-        MAP_UNION_ROOM,
-        MAP_UNDEFINED
-    };
+        {
+            MAP_OLDALE_TOWN_POKEMON_CENTER_1F,
+            MAP_DEWFORD_TOWN_POKEMON_CENTER_1F,
+            MAP_LAVARIDGE_TOWN_POKEMON_CENTER_1F,
+            MAP_FALLARBOR_TOWN_POKEMON_CENTER_1F,
+            MAP_VERDANTURF_TOWN_POKEMON_CENTER_1F,
+            MAP_PACIFIDLOG_TOWN_POKEMON_CENTER_1F,
+            MAP_PETALBURG_CITY_POKEMON_CENTER_1F,
+            MAP_SLATEPORT_CITY_POKEMON_CENTER_1F,
+            MAP_MAUVILLE_CITY_POKEMON_CENTER_1F,
+            MAP_RUSTBORO_CITY_POKEMON_CENTER_1F,
+            MAP_FORTREE_CITY_POKEMON_CENTER_1F,
+            MAP_LILYCOVE_CITY_POKEMON_CENTER_1F,
+            MAP_MOSSDEEP_CITY_POKEMON_CENTER_1F,
+            MAP_SOOTOPOLIS_CITY_POKEMON_CENTER_1F,
+            MAP_EVER_GRANDE_CITY_POKEMON_CENTER_1F,
+            MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F,
+            MAP_BATTLE_FRONTIER_POKEMON_CENTER_1F,
+            MAP_UNION_ROOM,
+            MAP_UNDEFINED};
 
     int i;
     u16 map = (gLastUsedWarp.mapGroup << 8) + gLastUsedWarp.mapNum;
@@ -2095,82 +2072,71 @@ void UpdateFrontierManiac(u16 daysSince)
 void ShowFrontierManiacMessage(void)
 {
     static const u8 *const sFrontierManiacMessages[][FRONTIER_MANIAC_MESSAGE_COUNT] =
-    {
-        [FRONTIER_MANIAC_TOWER_SINGLES] =
         {
-            BattleFrontier_Lounge2_Text_SalonMaidenIsThere,
-            BattleFrontier_Lounge2_Text_SalonMaidenSilverMons,
-            BattleFrontier_Lounge2_Text_SalonMaidenGoldMons
-        },
-        [FRONTIER_MANIAC_TOWER_DOUBLES] =
-        {
-            BattleFrontier_Lounge2_Text_DoubleBattleAdvice1,
-            BattleFrontier_Lounge2_Text_DoubleBattleAdvice2,
-            BattleFrontier_Lounge2_Text_DoubleBattleAdvice3
-        },
-        [FRONTIER_MANIAC_TOWER_MULTIS] =
-        {
-            BattleFrontier_Lounge2_Text_MultiBattleAdvice,
-            BattleFrontier_Lounge2_Text_MultiBattleAdvice,
-            BattleFrontier_Lounge2_Text_MultiBattleAdvice
-        },
-        [FRONTIER_MANIAC_TOWER_LINK] =
-        {
-            BattleFrontier_Lounge2_Text_LinkMultiBattleAdvice,
-            BattleFrontier_Lounge2_Text_LinkMultiBattleAdvice,
-            BattleFrontier_Lounge2_Text_LinkMultiBattleAdvice
-        },
-        [FRONTIER_MANIAC_DOME] =
-        {
-            BattleFrontier_Lounge2_Text_DomeAceIsThere,
-            BattleFrontier_Lounge2_Text_DomeAceSilverMons,
-            BattleFrontier_Lounge2_Text_DomeAceGoldMons
-        },
-        [FRONTIER_MANIAC_FACTORY] =
-        {
-            BattleFrontier_Lounge2_Text_FactoryHeadIsThere,
-            BattleFrontier_Lounge2_Text_FactoryHeadSilverMons,
-            BattleFrontier_Lounge2_Text_FactoryHeadGoldMons
-        },
-        [FRONTIER_MANIAC_PALACE] =
-        {
-            BattleFrontier_Lounge2_Text_PalaceMavenIsThere,
-            BattleFrontier_Lounge2_Text_PalaceMavenSilverMons,
-            BattleFrontier_Lounge2_Text_PalaceMavenGoldMons
-        },
-        [FRONTIER_MANIAC_ARENA] =
-        {
-            BattleFrontier_Lounge2_Text_ArenaTycoonIsThere,
-            BattleFrontier_Lounge2_Text_ArenaTycoonSilverMons,
-            BattleFrontier_Lounge2_Text_ArenaTycoonGoldMons
-        },
-        [FRONTIER_MANIAC_PIKE] =
-        {
-            BattleFrontier_Lounge2_Text_PikeQueenIsThere,
-            BattleFrontier_Lounge2_Text_PikeQueenSilverMons,
-            BattleFrontier_Lounge2_Text_PikeQueenGoldMons
-        },
-        [FRONTIER_MANIAC_PYRAMID] =
-        {
-            BattleFrontier_Lounge2_Text_PyramidKingIsThere,
-            BattleFrontier_Lounge2_Text_PyramidKingSilverMons,
-            BattleFrontier_Lounge2_Text_PyramidKingGoldMons
-        },
-    };
+            [FRONTIER_MANIAC_TOWER_SINGLES] =
+                {
+                    BattleFrontier_Lounge2_Text_SalonMaidenIsThere,
+                    BattleFrontier_Lounge2_Text_SalonMaidenSilverMons,
+                    BattleFrontier_Lounge2_Text_SalonMaidenGoldMons},
+            [FRONTIER_MANIAC_TOWER_DOUBLES] =
+                {
+                    BattleFrontier_Lounge2_Text_DoubleBattleAdvice1,
+                    BattleFrontier_Lounge2_Text_DoubleBattleAdvice2,
+                    BattleFrontier_Lounge2_Text_DoubleBattleAdvice3},
+            [FRONTIER_MANIAC_TOWER_MULTIS] =
+                {
+                    BattleFrontier_Lounge2_Text_MultiBattleAdvice,
+                    BattleFrontier_Lounge2_Text_MultiBattleAdvice,
+                    BattleFrontier_Lounge2_Text_MultiBattleAdvice},
+            [FRONTIER_MANIAC_TOWER_LINK] =
+                {
+                    BattleFrontier_Lounge2_Text_LinkMultiBattleAdvice,
+                    BattleFrontier_Lounge2_Text_LinkMultiBattleAdvice,
+                    BattleFrontier_Lounge2_Text_LinkMultiBattleAdvice},
+            [FRONTIER_MANIAC_DOME] =
+                {
+                    BattleFrontier_Lounge2_Text_DomeAceIsThere,
+                    BattleFrontier_Lounge2_Text_DomeAceSilverMons,
+                    BattleFrontier_Lounge2_Text_DomeAceGoldMons},
+            [FRONTIER_MANIAC_FACTORY] =
+                {
+                    BattleFrontier_Lounge2_Text_FactoryHeadIsThere,
+                    BattleFrontier_Lounge2_Text_FactoryHeadSilverMons,
+                    BattleFrontier_Lounge2_Text_FactoryHeadGoldMons},
+            [FRONTIER_MANIAC_PALACE] =
+                {
+                    BattleFrontier_Lounge2_Text_PalaceMavenIsThere,
+                    BattleFrontier_Lounge2_Text_PalaceMavenSilverMons,
+                    BattleFrontier_Lounge2_Text_PalaceMavenGoldMons},
+            [FRONTIER_MANIAC_ARENA] =
+                {
+                    BattleFrontier_Lounge2_Text_ArenaTycoonIsThere,
+                    BattleFrontier_Lounge2_Text_ArenaTycoonSilverMons,
+                    BattleFrontier_Lounge2_Text_ArenaTycoonGoldMons},
+            [FRONTIER_MANIAC_PIKE] =
+                {
+                    BattleFrontier_Lounge2_Text_PikeQueenIsThere,
+                    BattleFrontier_Lounge2_Text_PikeQueenSilverMons,
+                    BattleFrontier_Lounge2_Text_PikeQueenGoldMons},
+            [FRONTIER_MANIAC_PYRAMID] =
+                {
+                    BattleFrontier_Lounge2_Text_PyramidKingIsThere,
+                    BattleFrontier_Lounge2_Text_PyramidKingSilverMons,
+                    BattleFrontier_Lounge2_Text_PyramidKingGoldMons},
+        };
 
     static const u8 sFrontierManiacStreakThresholds[][FRONTIER_MANIAC_MESSAGE_COUNT - 1] =
-    {
-        [FRONTIER_MANIAC_TOWER_SINGLES] = { 21, 56 },
-        [FRONTIER_MANIAC_TOWER_DOUBLES] = { 21, 35 },
-        [FRONTIER_MANIAC_TOWER_MULTIS]  = { 255, 255 },
-        [FRONTIER_MANIAC_TOWER_LINK]    = { 255, 255 },
-        [FRONTIER_MANIAC_DOME]          = { 2, 4 },
-        [FRONTIER_MANIAC_FACTORY]       = { 7, 21 },
-        [FRONTIER_MANIAC_PALACE]        = { 7, 21 },
-        [FRONTIER_MANIAC_ARENA]         = { 14, 28 },
-        [FRONTIER_MANIAC_PIKE]          = { 13, 112 }, //BUG: 112 (0x70) is probably a mistake; the Pike Queen is battled twice well before that
-        [FRONTIER_MANIAC_PYRAMID]       = { 7, 56 }
-    };
+        {
+            [FRONTIER_MANIAC_TOWER_SINGLES] = {21, 56},
+            [FRONTIER_MANIAC_TOWER_DOUBLES] = {21, 35},
+            [FRONTIER_MANIAC_TOWER_MULTIS] = {255, 255},
+            [FRONTIER_MANIAC_TOWER_LINK] = {255, 255},
+            [FRONTIER_MANIAC_DOME] = {2, 4},
+            [FRONTIER_MANIAC_FACTORY] = {7, 21},
+            [FRONTIER_MANIAC_PALACE] = {7, 21},
+            [FRONTIER_MANIAC_ARENA] = {14, 28},
+            [FRONTIER_MANIAC_PIKE] = {13, 112}, // BUG: 112 (0x70) is probably a mistake; the Pike Queen is battled twice well before that
+            [FRONTIER_MANIAC_PYRAMID] = {7, 56}};
 
     u8 i;
     u16 winStreak = 0;
@@ -2182,50 +2148,43 @@ void ShowFrontierManiacMessage(void)
     case FRONTIER_MANIAC_TOWER_DOUBLES:
     case FRONTIER_MANIAC_TOWER_MULTIS:
     case FRONTIER_MANIAC_TOWER_LINK:
-        if (gSaveBlock2Ptr->frontier.towerWinStreaks[facility][FRONTIER_LVL_50]
-            >= gSaveBlock2Ptr->frontier.towerWinStreaks[facility][FRONTIER_LVL_OPEN])
+        if (gSaveBlock2Ptr->frontier.towerWinStreaks[facility][FRONTIER_LVL_50] >= gSaveBlock2Ptr->frontier.towerWinStreaks[facility][FRONTIER_LVL_OPEN])
             winStreak = gSaveBlock2Ptr->frontier.towerWinStreaks[facility][FRONTIER_LVL_50];
         else
             winStreak = gSaveBlock2Ptr->frontier.towerWinStreaks[facility][FRONTIER_LVL_OPEN];
         break;
     case FRONTIER_MANIAC_DOME:
-        if (gSaveBlock2Ptr->frontier.domeWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_50]
-            >= gSaveBlock2Ptr->frontier.domeWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_OPEN])
+        if (gSaveBlock2Ptr->frontier.domeWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_50] >= gSaveBlock2Ptr->frontier.domeWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_OPEN])
             winStreak = gSaveBlock2Ptr->frontier.domeWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_50];
         else
             winStreak = gSaveBlock2Ptr->frontier.domeWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_OPEN];
         break;
     case FRONTIER_MANIAC_FACTORY:
-        if (gSaveBlock2Ptr->frontier.factoryWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_50]
-            >= gSaveBlock2Ptr->frontier.factoryWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_OPEN])
+        if (gSaveBlock2Ptr->frontier.factoryWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_50] >= gSaveBlock2Ptr->frontier.factoryWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_OPEN])
             winStreak = gSaveBlock2Ptr->frontier.factoryWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_50];
         else
             winStreak = gSaveBlock2Ptr->frontier.factoryWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_OPEN];
         break;
     case FRONTIER_MANIAC_PALACE:
-        if (gSaveBlock2Ptr->frontier.palaceWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_50]
-            >= gSaveBlock2Ptr->frontier.palaceWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_OPEN])
+        if (gSaveBlock2Ptr->frontier.palaceWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_50] >= gSaveBlock2Ptr->frontier.palaceWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_OPEN])
             winStreak = gSaveBlock2Ptr->frontier.palaceWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_50];
         else
             winStreak = gSaveBlock2Ptr->frontier.palaceWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_OPEN];
         break;
     case FRONTIER_MANIAC_ARENA:
-        if (gSaveBlock2Ptr->frontier.arenaWinStreaks[FRONTIER_LVL_50]
-            >= gSaveBlock2Ptr->frontier.arenaWinStreaks[FRONTIER_LVL_OPEN])
+        if (gSaveBlock2Ptr->frontier.arenaWinStreaks[FRONTIER_LVL_50] >= gSaveBlock2Ptr->frontier.arenaWinStreaks[FRONTIER_LVL_OPEN])
             winStreak = gSaveBlock2Ptr->frontier.arenaWinStreaks[FRONTIER_LVL_50];
         else
             winStreak = gSaveBlock2Ptr->frontier.arenaWinStreaks[FRONTIER_LVL_OPEN];
         break;
     case FRONTIER_MANIAC_PIKE:
-        if (gSaveBlock2Ptr->frontier.pikeWinStreaks[FRONTIER_LVL_50]
-            >= gSaveBlock2Ptr->frontier.pikeWinStreaks[FRONTIER_LVL_OPEN])
+        if (gSaveBlock2Ptr->frontier.pikeWinStreaks[FRONTIER_LVL_50] >= gSaveBlock2Ptr->frontier.pikeWinStreaks[FRONTIER_LVL_OPEN])
             winStreak = gSaveBlock2Ptr->frontier.pikeWinStreaks[FRONTIER_LVL_50];
         else
             winStreak = gSaveBlock2Ptr->frontier.pikeWinStreaks[FRONTIER_LVL_OPEN];
         break;
     case FRONTIER_MANIAC_PYRAMID:
-        if (gSaveBlock2Ptr->frontier.pyramidWinStreaks[FRONTIER_LVL_50]
-            >= gSaveBlock2Ptr->frontier.pyramidWinStreaks[FRONTIER_LVL_OPEN])
+        if (gSaveBlock2Ptr->frontier.pyramidWinStreaks[FRONTIER_LVL_50] >= gSaveBlock2Ptr->frontier.pyramidWinStreaks[FRONTIER_LVL_OPEN])
             winStreak = gSaveBlock2Ptr->frontier.pyramidWinStreaks[FRONTIER_LVL_50];
         else
             winStreak = gSaveBlock2Ptr->frontier.pyramidWinStreaks[FRONTIER_LVL_OPEN];
@@ -2234,7 +2193,8 @@ void ShowFrontierManiacMessage(void)
         return;
     }
 
-    for (i = 0; i < FRONTIER_MANIAC_MESSAGE_COUNT - 1 && sFrontierManiacStreakThresholds[facility][i] < winStreak; i++);
+    for (i = 0; i < FRONTIER_MANIAC_MESSAGE_COUNT - 1 && sFrontierManiacStreakThresholds[facility][i] < winStreak; i++)
+        ;
 
     ShowFieldMessage(sFrontierManiacMessages[facility][i]);
 }
@@ -2243,8 +2203,7 @@ void ShowFrontierManiacMessage(void)
 void BufferBattleTowerElevatorFloors(void)
 {
     static const u16 sBattleTowerStreakThresholds[] = {
-        7, 14, 21, 28, 35, 49, 63, 77, 91, 0
-    };
+        7, 14, 21, 28, 35, 49, 63, 77, 91, 0};
 
     u8 i;
     u16 battleMode = VarGet(VAR_FRONTIER_BATTLE_MODE);
@@ -2272,20 +2231,20 @@ void BufferBattleTowerElevatorFloors(void)
 }
 
 // Scrollable Multichoice task data defines
-#define tMaxItemsOnScreen    data[0]
-#define tNumItems            data[1]
-#define tLeft                data[2]
-#define tTop                 data[3]
-#define tWidth               data[4]
-#define tHeight              data[5]
+#define tMaxItemsOnScreen data[0]
+#define tNumItems data[1]
+#define tLeft data[2]
+#define tTop data[3]
+#define tWidth data[4]
+#define tHeight data[5]
 #define tKeepOpenAfterSelect data[6]
-#define tScrollOffset        data[7]
-#define tSelectedRow         data[8]
-#define tScrollMultiId       data[11]
-#define tScrollArrowId       data[12]
-#define tWindowId            data[13]
-#define tListTaskId          data[14]
-#define tTaskId              data[15]
+#define tScrollOffset data[7]
+#define tSelectedRow data[8]
+#define tScrollMultiId data[11]
+#define tScrollArrowId data[12]
+#define tWindowId data[13]
+#define tListTaskId data[14]
+#define tTaskId data[15]
 // data[9] and [10] unused
 
 void ShowScrollableMultichoice(void)
@@ -2425,160 +2384,146 @@ void ShowScrollableMultichoice(void)
 }
 
 static const u8 *const sScrollableMultichoiceOptions[][MAX_SCROLL_MULTI_LENGTH] =
-{
-    [SCROLL_MULTI_NONE] =
     {
-        gText_Exit
-    },
-    [SCROLL_MULTI_GLASS_WORKSHOP_VENDOR] =
-    {
-        COMPOUND_STRING("BLUE FLUTE"),
-        COMPOUND_STRING("YELLOW FLUTE"),
-        COMPOUND_STRING("RED FLUTE"),
-        COMPOUND_STRING("WHITE FLUTE"),
-        COMPOUND_STRING("BLACK FLUTE"),
-        COMPOUND_STRING("PRETTY CHAIR"),
-        COMPOUND_STRING("PRETTY DESK"),
-        gText_Exit
-    },
-    [SCROLL_MULTI_POKEMON_FAN_CLUB_RATER] =
-    {
-        COMPOUND_STRING("0 pts"),
-        COMPOUND_STRING("10 pts"),
-        COMPOUND_STRING("20 pts"),
-        COMPOUND_STRING("30 pts"),
-        COMPOUND_STRING("40 pts"),
-        COMPOUND_STRING("50 pts"),
-        COMPOUND_STRING("60 pts"),
-        COMPOUND_STRING("70 pts"),
-        COMPOUND_STRING("80 pts"),
-        COMPOUND_STRING("90 pts"),
-        COMPOUND_STRING("100 pts"),
-        COMPOUND_STRING("?")
-    },
-    [SCROLL_MULTI_BF_EXCHANGE_CORNER_DECOR_VENDOR_1] =
-    {
-        COMPOUND_STRING("KISS POSTER{CLEAR_TO 0x5E}16BP"),
-        COMPOUND_STRING("KISS CUSHION{CLEAR_TO 0x5E}32BP"),
-        COMPOUND_STRING("SMOOCHUM DOLL{CLEAR_TO 0x5E}32BP"),
-        COMPOUND_STRING("TOGEPI DOLL{CLEAR_TO 0x5E}48BP"),
-        COMPOUND_STRING("MEOWTH DOLL{CLEAR_TO 0x5E}48BP"),
-        COMPOUND_STRING("CLEFAIRY DOLL{CLEAR_TO 0x5E}48BP"),
-        COMPOUND_STRING("DITTO DOLL{CLEAR_TO 0x5E}48BP"),
-        COMPOUND_STRING("CYNDAQUIL DOLL{CLEAR_TO 0x5E}80BP"),
-        COMPOUND_STRING("CHIKORITA DOLL{CLEAR_TO 0x5E}80BP"),
-        COMPOUND_STRING("TOTODILE DOLL{CLEAR_TO 0x5E}80BP"),
-        gText_Exit
-    },
-    [SCROLL_MULTI_BF_EXCHANGE_CORNER_DECOR_VENDOR_2] =
-    {
-        COMPOUND_STRING("LAPRAS DOLL{CLEAR_TO 0x58}128BP"),
-        COMPOUND_STRING("SNORLAX DOLL{CLEAR_TO 0x58}128BP"),
-        COMPOUND_STRING("VENUSAUR DOLL{CLEAR_TO 0x58}256BP"),
-        COMPOUND_STRING("CHARIZARD DOLL{CLEAR_TO 0x58}256BP"),
-        COMPOUND_STRING("BLASTOISE DOLL{CLEAR_TO 0x58}256BP"),
-        gText_Exit
-    },
-    [SCROLL_MULTI_BF_EXCHANGE_CORNER_VITAMIN_VENDOR] =
-    {
-        COMPOUND_STRING("PROTEIN{CLEAR_TO 0x64}1BP"),
-        COMPOUND_STRING("CALCIUM{CLEAR_TO 0x64}1BP"),
-        COMPOUND_STRING("IRON{CLEAR_TO 0x64}1BP"),
-        COMPOUND_STRING("ZINC{CLEAR_TO 0x64}1BP"),
-        COMPOUND_STRING("CARBOS{CLEAR_TO 0x64}1BP"),
-        COMPOUND_STRING("HP UP{CLEAR_TO 0x64}1BP"),
-        gText_Exit
-    },
-    [SCROLL_MULTI_BF_EXCHANGE_CORNER_HOLD_ITEM_VENDOR] =
-    {
-        COMPOUND_STRING("LEFTOVERS{CLEAR_TO 0x5E}48BP"),
-        COMPOUND_STRING("WHITE HERB{CLEAR_TO 0x5E}48BP"),
-        COMPOUND_STRING("QUICK CLAW{CLEAR_TO 0x5E}48BP"),
-        COMPOUND_STRING("MENTAL HERB{CLEAR_TO 0x5E}48BP"),
-        COMPOUND_STRING("BRIGHTPOWDER{CLEAR_TO 0x5E}64BP"),
-        COMPOUND_STRING("CHOICE BAND{CLEAR_TO 0x5E}64BP"),
-        COMPOUND_STRING("KING'S ROCK{CLEAR_TO 0x5E}64BP"),
-        COMPOUND_STRING("FOCUS BAND{CLEAR_TO 0x5E}64BP"),
-        COMPOUND_STRING("SCOPE LENS{CLEAR_TO 0x5E}64BP"),
-        gText_Exit
-    },
-    [SCROLL_MULTI_BERRY_POWDER_VENDOR] =
-    {
-        COMPOUND_STRING("ENERGYPOWDER{CLEAR_TO 114}{FONT_SMALL}50"),
-        COMPOUND_STRING("ENERGY ROOT{CLEAR_TO 114}{FONT_SMALL}80"),
-        COMPOUND_STRING("HEAL POWDER{CLEAR_TO 114}{FONT_SMALL}50"),
-        COMPOUND_STRING("REVIVAL HERB{CLEAR_TO 108}{FONT_SMALL}300"),
-        COMPOUND_STRING("PROTEIN{CLEAR_TO 99}{FONT_SMALL}1,000"),
-        COMPOUND_STRING("IRON{CLEAR_TO 99}{FONT_SMALL}1,000"),
-        COMPOUND_STRING("CARBOS{CLEAR_TO 99}{FONT_SMALL}1,000"),
-        COMPOUND_STRING("CALCIUM{CLEAR_TO 99}{FONT_SMALL}1,000"),
-        COMPOUND_STRING("ZINC{CLEAR_TO 99}{FONT_SMALL}1,000"),
-        COMPOUND_STRING("HP UP{CLEAR_TO 99}{FONT_SMALL}1,000"),
-        COMPOUND_STRING("PP UP{CLEAR_TO 99}{FONT_SMALL}3,000"),
-        gText_Exit
-    },
-    [SCROLL_MULTI_BF_RECEPTIONIST] =
-    {
-        gText_BattleTower2,
-        gText_BattleDome,
-        gText_BattlePalace,
-        gText_BattleArena,
-        gText_BattleFactory,
-        gText_BattlePike,
-        gText_BattlePyramid,
-        gText_RankingHall,
-        gText_ExchangeService,
-        gText_Exit
-    },
-    [SCROLL_MULTI_BF_MOVE_TUTOR_1] =
-    {
-        COMPOUND_STRING("SOFTBOILED{CLEAR_TO 0x4E}16BP"),
-        COMPOUND_STRING("SEISMIC TOSS{CLEAR_TO 0x4E}24BP"),
-        COMPOUND_STRING("DREAM EATER{CLEAR_TO 0x4E}24BP"),
-        COMPOUND_STRING("MEGA PUNCH{CLEAR_TO 0x4E}24BP"),
-        COMPOUND_STRING("MEGA KICK{CLEAR_TO 0x4E}48BP"),
-        COMPOUND_STRING("BODY SLAM{CLEAR_TO 0x4E}48BP"),
-        COMPOUND_STRING("ROCK SLIDE{CLEAR_TO 0x4E}48BP"),
-        COMPOUND_STRING("COUNTER{CLEAR_TO 0x4E}48BP"),
-        COMPOUND_STRING("THUNDER WAVE{CLEAR_TO 0x4E}48BP"),
-        COMPOUND_STRING("SWORDS DANCE{CLEAR_TO 0x4E}48BP"),
-        gText_Exit
-    },
-    [SCROLL_MULTI_BF_MOVE_TUTOR_2] =
-    {
-        COMPOUND_STRING("DEFENSE CURL{CLEAR_TO 0x4E}16BP"),
-        COMPOUND_STRING("SNORE{CLEAR_TO 0x4E}24BP"),
-        COMPOUND_STRING("MUD-SLAP{CLEAR_TO 0x4E}24BP"),
-        COMPOUND_STRING("SWIFT{CLEAR_TO 0x4E}24BP"),
-        COMPOUND_STRING("ICY WIND{CLEAR_TO 0x4E}24BP"),
-        COMPOUND_STRING("ENDURE{CLEAR_TO 0x4E}48BP"),
-        COMPOUND_STRING("PSYCH UP{CLEAR_TO 0x4E}48BP"),
-        COMPOUND_STRING("ICE PUNCH{CLEAR_TO 0x4E}48BP"),
-        COMPOUND_STRING("THUNDERPUNCH{CLEAR_TO 0x4E}48BP"),
-        COMPOUND_STRING("FIRE PUNCH{CLEAR_TO 0x4E}48BP"),
-        gText_Exit
-    },
-    [SCROLL_MULTI_SS_TIDAL_DESTINATION] =
-    {
-        gText_SlateportCity,
-        gText_BattleFrontier,
-        gText_SouthernIsland,
-        gText_NavelRock,
-        gText_BirthIsland,
-        gText_FarawayIsland,
-        gText_Exit
-    },
-    [SCROLL_MULTI_BATTLE_TENT_RULES] =
-    {
-        gText_BattleTrainers,
-        gText_BattleBasics,
-        gText_PokemonNature,
-        gText_PokemonMoves,
-        gText_Underpowered,
-        gText_WhenInDanger,
-        gText_Exit
-    }
-};
+        [SCROLL_MULTI_NONE] =
+            {
+                gText_Exit},
+        [SCROLL_MULTI_GLASS_WORKSHOP_VENDOR] =
+            {
+                COMPOUND_STRING("BLUE FLUTE"),
+                COMPOUND_STRING("YELLOW FLUTE"),
+                COMPOUND_STRING("RED FLUTE"),
+                COMPOUND_STRING("WHITE FLUTE"),
+                COMPOUND_STRING("BLACK FLUTE"),
+                COMPOUND_STRING("PRETTY CHAIR"),
+                COMPOUND_STRING("PRETTY DESK"),
+                gText_Exit},
+        [SCROLL_MULTI_POKEMON_FAN_CLUB_RATER] =
+            {
+                COMPOUND_STRING("0 pts"),
+                COMPOUND_STRING("10 pts"),
+                COMPOUND_STRING("20 pts"),
+                COMPOUND_STRING("30 pts"),
+                COMPOUND_STRING("40 pts"),
+                COMPOUND_STRING("50 pts"),
+                COMPOUND_STRING("60 pts"),
+                COMPOUND_STRING("70 pts"),
+                COMPOUND_STRING("80 pts"),
+                COMPOUND_STRING("90 pts"),
+                COMPOUND_STRING("100 pts"),
+                COMPOUND_STRING("?")},
+        [SCROLL_MULTI_BF_EXCHANGE_CORNER_DECOR_VENDOR_1] =
+            {
+                COMPOUND_STRING("KISS POSTER{CLEAR_TO 0x5E}16BP"),
+                COMPOUND_STRING("KISS CUSHION{CLEAR_TO 0x5E}32BP"),
+                COMPOUND_STRING("SMOOCHUM DOLL{CLEAR_TO 0x5E}32BP"),
+                COMPOUND_STRING("TOGEPI DOLL{CLEAR_TO 0x5E}48BP"),
+                COMPOUND_STRING("MEOWTH DOLL{CLEAR_TO 0x5E}48BP"),
+                COMPOUND_STRING("CLEFAIRY DOLL{CLEAR_TO 0x5E}48BP"),
+                COMPOUND_STRING("DITTO DOLL{CLEAR_TO 0x5E}48BP"),
+                COMPOUND_STRING("CYNDAQUIL DOLL{CLEAR_TO 0x5E}80BP"),
+                COMPOUND_STRING("CHIKORITA DOLL{CLEAR_TO 0x5E}80BP"),
+                COMPOUND_STRING("TOTODILE DOLL{CLEAR_TO 0x5E}80BP"),
+                gText_Exit},
+        [SCROLL_MULTI_BF_EXCHANGE_CORNER_DECOR_VENDOR_2] =
+            {
+                COMPOUND_STRING("LAPRAS DOLL{CLEAR_TO 0x58}128BP"),
+                COMPOUND_STRING("SNORLAX DOLL{CLEAR_TO 0x58}128BP"),
+                COMPOUND_STRING("VENUSAUR DOLL{CLEAR_TO 0x58}256BP"),
+                COMPOUND_STRING("CHARIZARD DOLL{CLEAR_TO 0x58}256BP"),
+                COMPOUND_STRING("BLASTOISE DOLL{CLEAR_TO 0x58}256BP"),
+                gText_Exit},
+        [SCROLL_MULTI_BF_EXCHANGE_CORNER_VITAMIN_VENDOR] =
+            {
+                COMPOUND_STRING("PROTEIN{CLEAR_TO 0x64}1BP"),
+                COMPOUND_STRING("CALCIUM{CLEAR_TO 0x64}1BP"),
+                COMPOUND_STRING("IRON{CLEAR_TO 0x64}1BP"),
+                COMPOUND_STRING("ZINC{CLEAR_TO 0x64}1BP"),
+                COMPOUND_STRING("CARBOS{CLEAR_TO 0x64}1BP"),
+                COMPOUND_STRING("HP UP{CLEAR_TO 0x64}1BP"),
+                gText_Exit},
+        [SCROLL_MULTI_BF_EXCHANGE_CORNER_HOLD_ITEM_VENDOR] =
+            {
+                COMPOUND_STRING("LEFTOVERS{CLEAR_TO 0x5E}48BP"),
+                COMPOUND_STRING("WHITE HERB{CLEAR_TO 0x5E}48BP"),
+                COMPOUND_STRING("QUICK CLAW{CLEAR_TO 0x5E}48BP"),
+                COMPOUND_STRING("MENTAL HERB{CLEAR_TO 0x5E}48BP"),
+                COMPOUND_STRING("BRIGHTPOWDER{CLEAR_TO 0x5E}64BP"),
+                COMPOUND_STRING("CHOICE BAND{CLEAR_TO 0x5E}64BP"),
+                COMPOUND_STRING("KING'S ROCK{CLEAR_TO 0x5E}64BP"),
+                COMPOUND_STRING("FOCUS BAND{CLEAR_TO 0x5E}64BP"),
+                COMPOUND_STRING("SCOPE LENS{CLEAR_TO 0x5E}64BP"),
+                gText_Exit},
+        [SCROLL_MULTI_BERRY_POWDER_VENDOR] =
+            {
+                COMPOUND_STRING("ENERGYPOWDER{CLEAR_TO 114}{FONT_SMALL}50"),
+                COMPOUND_STRING("ENERGY ROOT{CLEAR_TO 114}{FONT_SMALL}80"),
+                COMPOUND_STRING("HEAL POWDER{CLEAR_TO 114}{FONT_SMALL}50"),
+                COMPOUND_STRING("REVIVAL HERB{CLEAR_TO 108}{FONT_SMALL}300"),
+                COMPOUND_STRING("PROTEIN{CLEAR_TO 99}{FONT_SMALL}1,000"),
+                COMPOUND_STRING("IRON{CLEAR_TO 99}{FONT_SMALL}1,000"),
+                COMPOUND_STRING("CARBOS{CLEAR_TO 99}{FONT_SMALL}1,000"),
+                COMPOUND_STRING("CALCIUM{CLEAR_TO 99}{FONT_SMALL}1,000"),
+                COMPOUND_STRING("ZINC{CLEAR_TO 99}{FONT_SMALL}1,000"),
+                COMPOUND_STRING("HP UP{CLEAR_TO 99}{FONT_SMALL}1,000"),
+                COMPOUND_STRING("PP UP{CLEAR_TO 99}{FONT_SMALL}3,000"),
+                gText_Exit},
+        [SCROLL_MULTI_BF_RECEPTIONIST] =
+            {
+                gText_BattleTower2,
+                gText_BattleDome,
+                gText_BattlePalace,
+                gText_BattleArena,
+                gText_BattleFactory,
+                gText_BattlePike,
+                gText_BattlePyramid,
+                gText_RankingHall,
+                gText_ExchangeService,
+                gText_Exit},
+        [SCROLL_MULTI_BF_MOVE_TUTOR_1] =
+            {
+                COMPOUND_STRING("SOFTBOILED{CLEAR_TO 0x4E}16BP"),
+                COMPOUND_STRING("SEISMIC TOSS{CLEAR_TO 0x4E}24BP"),
+                COMPOUND_STRING("DREAM EATER{CLEAR_TO 0x4E}24BP"),
+                COMPOUND_STRING("MEGA PUNCH{CLEAR_TO 0x4E}24BP"),
+                COMPOUND_STRING("MEGA KICK{CLEAR_TO 0x4E}48BP"),
+                COMPOUND_STRING("BODY SLAM{CLEAR_TO 0x4E}48BP"),
+                COMPOUND_STRING("ROCK SLIDE{CLEAR_TO 0x4E}48BP"),
+                COMPOUND_STRING("COUNTER{CLEAR_TO 0x4E}48BP"),
+                COMPOUND_STRING("THUNDER WAVE{CLEAR_TO 0x4E}48BP"),
+                COMPOUND_STRING("SWORDS DANCE{CLEAR_TO 0x4E}48BP"),
+                gText_Exit},
+        [SCROLL_MULTI_BF_MOVE_TUTOR_2] =
+            {
+                COMPOUND_STRING("DEFENSE CURL{CLEAR_TO 0x4E}16BP"),
+                COMPOUND_STRING("SNORE{CLEAR_TO 0x4E}24BP"),
+                COMPOUND_STRING("MUD-SLAP{CLEAR_TO 0x4E}24BP"),
+                COMPOUND_STRING("SWIFT{CLEAR_TO 0x4E}24BP"),
+                COMPOUND_STRING("ICY WIND{CLEAR_TO 0x4E}24BP"),
+                COMPOUND_STRING("ENDURE{CLEAR_TO 0x4E}48BP"),
+                COMPOUND_STRING("PSYCH UP{CLEAR_TO 0x4E}48BP"),
+                COMPOUND_STRING("ICE PUNCH{CLEAR_TO 0x4E}48BP"),
+                COMPOUND_STRING("THUNDERPUNCH{CLEAR_TO 0x4E}48BP"),
+                COMPOUND_STRING("FIRE PUNCH{CLEAR_TO 0x4E}48BP"),
+                gText_Exit},
+        [SCROLL_MULTI_SS_TIDAL_DESTINATION] =
+            {
+                gText_SlateportCity,
+                gText_BattleFrontier,
+                gText_SouthernIsland,
+                gText_NavelRock,
+                gText_BirthIsland,
+                gText_FarawayIsland,
+                gText_Exit},
+        [SCROLL_MULTI_BATTLE_TENT_RULES] =
+            {
+                gText_BattleTrainers,
+                gText_BattleBasics,
+                gText_PokemonNature,
+                gText_PokemonMoves,
+                gText_Underpowered,
+                gText_WhenInDanger,
+                gText_Exit}};
 
 static void Task_ShowScrollableMultichoice(u8 taskId)
 {
@@ -2770,8 +2715,7 @@ static void ScrollableMultichoice_UpdateScrollArrows(u8 taskId)
         .fullyDownThreshold = 0,
         .tileTag = GFXTAG_MULTICHOICE_SCROLL_ARROWS,
         .palTag = PALTAG_MULTICHOICE_SCROLL_ARROWS,
-        .palNum = 0
-    };
+        .palNum = 0};
 
     struct Task *task = &gTasks[taskId];
     struct ScrollArrowsTemplate template = sScrollableMultichoice_ScrollArrowsTemplate;
@@ -2799,7 +2743,6 @@ static void ScrollableMultichoice_RemoveScrollArrows(u8 taskId)
 // Removed for Emerald (replaced by ShowScrollableMultichoice)
 void ShowGlassWorkshopMenu(void)
 {
-
 }
 
 void SetBattleTowerLinkPlayerGfx(void)
@@ -2835,20 +2778,20 @@ void UpdateFrontierGambler(u16 daysSince)
 void ShowFrontierGamblerLookingMessage(void)
 {
     static const u8 *const sFrontierGamblerLookingMessages[] =
-    {
-        BattleFrontier_Lounge3_Text_ChallengeBattleTowerSingle,
-        BattleFrontier_Lounge3_Text_ChallengeBattleTowerDouble,
-        BattleFrontier_Lounge3_Text_ChallengeBattleTowerMulti,
-        BattleFrontier_Lounge3_Text_ChallengeBattleDomeSingle,
-        BattleFrontier_Lounge3_Text_ChallengeBattleDomeDouble,
-        BattleFrontier_Lounge3_Text_ChallengeBattleFactorySingle,
-        BattleFrontier_Lounge3_Text_ChallengeBattleFactoryDouble,
-        BattleFrontier_Lounge3_Text_ChallengeBattlePalaceSingle,
-        BattleFrontier_Lounge3_Text_ChallengeBattlePalaceDouble,
-        BattleFrontier_Lounge3_Text_ChallengeBattleArena,
-        BattleFrontier_Lounge3_Text_ChallengeBattlePike,
-        BattleFrontier_Lounge3_Text_ChallengeBattlePyramid,
-    };
+        {
+            BattleFrontier_Lounge3_Text_ChallengeBattleTowerSingle,
+            BattleFrontier_Lounge3_Text_ChallengeBattleTowerDouble,
+            BattleFrontier_Lounge3_Text_ChallengeBattleTowerMulti,
+            BattleFrontier_Lounge3_Text_ChallengeBattleDomeSingle,
+            BattleFrontier_Lounge3_Text_ChallengeBattleDomeDouble,
+            BattleFrontier_Lounge3_Text_ChallengeBattleFactorySingle,
+            BattleFrontier_Lounge3_Text_ChallengeBattleFactoryDouble,
+            BattleFrontier_Lounge3_Text_ChallengeBattlePalaceSingle,
+            BattleFrontier_Lounge3_Text_ChallengeBattlePalaceDouble,
+            BattleFrontier_Lounge3_Text_ChallengeBattleArena,
+            BattleFrontier_Lounge3_Text_ChallengeBattlePike,
+            BattleFrontier_Lounge3_Text_ChallengeBattlePyramid,
+        };
 
     u16 challenge = VarGet(VAR_FRONTIER_GAMBLER_CHALLENGE);
     ShowFieldMessage(sFrontierGamblerLookingMessages[challenge]);
@@ -2858,20 +2801,20 @@ void ShowFrontierGamblerLookingMessage(void)
 void ShowFrontierGamblerGoMessage(void)
 {
     static const u8 *const sFrontierGamblerGoMessages[] =
-    {
-        BattleFrontier_Lounge3_Text_GetToBattleTowerSingle,
-        BattleFrontier_Lounge3_Text_GetToBattleTowerDouble,
-        BattleFrontier_Lounge3_Text_GetToBattleTowerMulti,
-        BattleFrontier_Lounge3_Text_GetToBattleDomeSingle,
-        BattleFrontier_Lounge3_Text_GetToBattleDomeDouble,
-        BattleFrontier_Lounge3_Text_GetToBattleFactorySingle,
-        BattleFrontier_Lounge3_Text_GetToBattleFactoryDouble,
-        BattleFrontier_Lounge3_Text_GetToBattlePalaceSingle,
-        BattleFrontier_Lounge3_Text_GetToBattlePalaceDouble,
-        BattleFrontier_Lounge3_Text_GetToBattleArena,
-        BattleFrontier_Lounge3_Text_GetToBattlePike,
-        BattleFrontier_Lounge3_Text_GetToBattlePyramid,
-    };
+        {
+            BattleFrontier_Lounge3_Text_GetToBattleTowerSingle,
+            BattleFrontier_Lounge3_Text_GetToBattleTowerDouble,
+            BattleFrontier_Lounge3_Text_GetToBattleTowerMulti,
+            BattleFrontier_Lounge3_Text_GetToBattleDomeSingle,
+            BattleFrontier_Lounge3_Text_GetToBattleDomeDouble,
+            BattleFrontier_Lounge3_Text_GetToBattleFactorySingle,
+            BattleFrontier_Lounge3_Text_GetToBattleFactoryDouble,
+            BattleFrontier_Lounge3_Text_GetToBattlePalaceSingle,
+            BattleFrontier_Lounge3_Text_GetToBattlePalaceDouble,
+            BattleFrontier_Lounge3_Text_GetToBattleArena,
+            BattleFrontier_Lounge3_Text_GetToBattlePike,
+            BattleFrontier_Lounge3_Text_GetToBattlePyramid,
+        };
 
     ShowFieldMessage(sFrontierGamblerGoMessages[VarGet(VAR_FRONTIER_GAMBLER_SET_CHALLENGE)]);
 }
@@ -2879,20 +2822,19 @@ void ShowFrontierGamblerGoMessage(void)
 void FrontierGamblerSetWonOrLost(bool8 won)
 {
     static const u16 sFrontierChallenges[] =
-    {
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_TOWER,   FRONTIER_MODE_SINGLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_TOWER,   FRONTIER_MODE_DOUBLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_TOWER,   FRONTIER_MODE_MULTIS),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_DOME,    FRONTIER_MODE_SINGLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_DOME,    FRONTIER_MODE_DOUBLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_FACTORY, FRONTIER_MODE_SINGLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_FACTORY, FRONTIER_MODE_DOUBLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_PALACE,  FRONTIER_MODE_SINGLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_PALACE,  FRONTIER_MODE_DOUBLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_ARENA,   FRONTIER_MODE_SINGLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_PIKE,    FRONTIER_MODE_SINGLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_PYRAMID, FRONTIER_MODE_SINGLES)
-    };
+        {
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_TOWER, FRONTIER_MODE_SINGLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_TOWER, FRONTIER_MODE_DOUBLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_TOWER, FRONTIER_MODE_MULTIS),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_DOME, FRONTIER_MODE_SINGLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_DOME, FRONTIER_MODE_DOUBLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_FACTORY, FRONTIER_MODE_SINGLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_FACTORY, FRONTIER_MODE_DOUBLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_PALACE, FRONTIER_MODE_SINGLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_PALACE, FRONTIER_MODE_DOUBLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_ARENA, FRONTIER_MODE_SINGLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_PIKE, FRONTIER_MODE_SINGLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_PYRAMID, FRONTIER_MODE_SINGLES)};
 
     u16 battleMode = VarGet(VAR_FRONTIER_BATTLE_MODE);
     u16 challenge = VarGet(VAR_FRONTIER_GAMBLER_SET_CHALLENGE);
@@ -2900,7 +2842,7 @@ void FrontierGamblerSetWonOrLost(bool8 won)
 
     if (VarGet(VAR_FRONTIER_GAMBLER_STATE) == FRONTIER_GAMBLER_PLACED_BET)
     {
-        if (sFrontierChallenges[challenge] ==  FRONTIER_CHALLENGE(frontierFacilityId, battleMode))
+        if (sFrontierChallenges[challenge] == FRONTIER_CHALLENGE(frontierFacilityId, battleMode))
         {
             if (won)
                 VarSet(VAR_FRONTIER_GAMBLER_STATE, FRONTIER_GAMBLER_WON);
@@ -2922,15 +2864,15 @@ void UpdateBattlePointsWindow(void)
 void ShowBattlePointsWindow(void)
 {
     static const struct WindowTemplate sBattlePoints_WindowTemplate =
-    {
-        .bg = 0,
-        .tilemapLeft = 1,
-        .tilemapTop = 1,
-        .width = 6,
-        .height = 2,
-        .paletteNum = 15,
-        .baseBlock = 8,
-    };
+        {
+            .bg = 0,
+            .tilemapLeft = 1,
+            .tilemapTop = 1,
+            .width = 6,
+            .height = 2,
+            .paletteNum = 15,
+            .baseBlock = 8,
+        };
 
     sBattlePointsWindowId = AddWindow(&sBattlePoints_WindowTemplate);
     SetStandardWindowBorderStyle(sBattlePointsWindowId, FALSE);
@@ -2968,15 +2910,15 @@ u16 GetFrontierBattlePoints(void)
 void ShowFrontierExchangeCornerItemIconWindow(void)
 {
     static const struct WindowTemplate sFrontierExchangeCorner_ItemIconWindowTemplate =
-    {
-        .bg = 0,
-        .tilemapLeft = 2,
-        .tilemapTop = 9,
-        .width = 4,
-        .height = 4,
-        .paletteNum = 15,
-        .baseBlock = 20,
-    };
+        {
+            .bg = 0,
+            .tilemapLeft = 2,
+            .tilemapTop = 9,
+            .width = 4,
+            .height = 4,
+            .paletteNum = 15,
+            .baseBlock = 20,
+        };
 
     sFrontierExchangeCorner_ItemIconWindowId = AddWindow(&sFrontierExchangeCorner_ItemIconWindowTemplate);
     SetStandardWindowBorderStyle(sFrontierExchangeCorner_ItemIconWindowId, FALSE);
@@ -2991,7 +2933,7 @@ void CloseFrontierExchangeCornerItemIconWindow(void)
 
 static void FillFrontierExchangeCornerWindowAndItemIcon(u16 menu, u16 selection)
 {
-    #include "data/battle_frontier/battle_frontier_exchange_corner.h"
+#include "data/battle_frontier/battle_frontier_exchange_corner.h"
 
     if (menu >= SCROLL_MULTI_BF_EXCHANGE_CORNER_DECOR_VENDOR_1 && menu <= SCROLL_MULTI_BF_EXCHANGE_CORNER_HOLD_ITEM_VENDOR)
     {
@@ -3076,15 +3018,15 @@ void BufferBattleFrontierTutorMoveName(void)
 static void ShowBattleFrontierTutorWindow(u8 menu, u16 selection)
 {
     static const struct WindowTemplate sBattleFrontierTutor_WindowTemplate =
-    {
-        .bg = 0,
-        .tilemapLeft = 1,
-        .tilemapTop = 7,
-        .width = 12,
-        .height = 6,
-        .paletteNum = 15,
-        .baseBlock = 28,
-    };
+        {
+            .bg = 0,
+            .tilemapLeft = 1,
+            .tilemapTop = 7,
+            .width = 12,
+            .height = 6,
+            .paletteNum = 15,
+            .baseBlock = 28,
+        };
 
     if (menu == SCROLL_MULTI_BF_MOVE_TUTOR_1 || menu == SCROLL_MULTI_BF_MOVE_TUTOR_2)
     {
@@ -3100,34 +3042,34 @@ static void ShowBattleFrontierTutorWindow(u8 menu, u16 selection)
 static void ShowBattleFrontierTutorMoveDescription(u8 menu, u16 selection)
 {
     static const u8 *const sBattleFrontier_TutorMoveDescriptions1[] =
-    {
-        BattleFrontier_Lounge7_Text_SoftboiledDesc,
-        BattleFrontier_Lounge7_Text_SeismicTossDesc,
-        BattleFrontier_Lounge7_Text_DreamEaterDesc,
-        BattleFrontier_Lounge7_Text_MegaPunchDesc,
-        BattleFrontier_Lounge7_Text_MegaKickDesc,
-        BattleFrontier_Lounge7_Text_BodySlamDesc,
-        BattleFrontier_Lounge7_Text_RockSlideDesc,
-        BattleFrontier_Lounge7_Text_CounterDesc,
-        BattleFrontier_Lounge7_Text_ThunderWaveDesc,
-        BattleFrontier_Lounge7_Text_SwordsDanceDesc,
-        gText_Exit,
-    };
+        {
+            BattleFrontier_Lounge7_Text_SoftboiledDesc,
+            BattleFrontier_Lounge7_Text_SeismicTossDesc,
+            BattleFrontier_Lounge7_Text_DreamEaterDesc,
+            BattleFrontier_Lounge7_Text_MegaPunchDesc,
+            BattleFrontier_Lounge7_Text_MegaKickDesc,
+            BattleFrontier_Lounge7_Text_BodySlamDesc,
+            BattleFrontier_Lounge7_Text_RockSlideDesc,
+            BattleFrontier_Lounge7_Text_CounterDesc,
+            BattleFrontier_Lounge7_Text_ThunderWaveDesc,
+            BattleFrontier_Lounge7_Text_SwordsDanceDesc,
+            gText_Exit,
+        };
 
     static const u8 *const sBattleFrontier_TutorMoveDescriptions2[] =
-    {
-        BattleFrontier_Lounge7_Text_DefenseCurlDesc,
-        BattleFrontier_Lounge7_Text_SnoreDesc,
-        BattleFrontier_Lounge7_Text_MudSlapDesc,
-        BattleFrontier_Lounge7_Text_SwiftDesc,
-        BattleFrontier_Lounge7_Text_IcyWindDesc,
-        BattleFrontier_Lounge7_Text_EndureDesc,
-        BattleFrontier_Lounge7_Text_PsychUpDesc,
-        BattleFrontier_Lounge7_Text_IcePunchDesc,
-        BattleFrontier_Lounge7_Text_ThunderPunchDesc,
-        BattleFrontier_Lounge7_Text_FirePunchDesc,
-        gText_Exit,
-    };
+        {
+            BattleFrontier_Lounge7_Text_DefenseCurlDesc,
+            BattleFrontier_Lounge7_Text_SnoreDesc,
+            BattleFrontier_Lounge7_Text_MudSlapDesc,
+            BattleFrontier_Lounge7_Text_SwiftDesc,
+            BattleFrontier_Lounge7_Text_IcyWindDesc,
+            BattleFrontier_Lounge7_Text_EndureDesc,
+            BattleFrontier_Lounge7_Text_PsychUpDesc,
+            BattleFrontier_Lounge7_Text_IcePunchDesc,
+            BattleFrontier_Lounge7_Text_ThunderPunchDesc,
+            BattleFrontier_Lounge7_Text_FirePunchDesc,
+            gText_Exit,
+        };
 
     if (menu == SCROLL_MULTI_BF_MOVE_TUTOR_1 || menu == SCROLL_MULTI_BF_MOVE_TUTOR_2)
     {
@@ -3223,22 +3165,22 @@ static const u16 sDeoxysRockPalettes[DEOXYS_ROCK_LEVELS][16] = {
 };
 
 static const u8 sDeoxysRockCoords[DEOXYS_ROCK_LEVELS][2] = {
-    { 15, 12 },
-    { 11, 14 },
-    { 15,  8 },
-    { 19, 14 },
-    { 12, 11 },
-    { 18, 11 },
-    { 15, 14 },
-    { 11, 14 },
-    { 19, 14 },
-    { 15, 15 },
-    { 15, 10 },
+    {15, 12},
+    {11, 14},
+    {15, 8},
+    {19, 14},
+    {12, 11},
+    {18, 11},
+    {15, 14},
+    {11, 14},
+    {19, 14},
+    {15, 15},
+    {15, 10},
 };
 
 static void Task_DeoxysRockInteraction(u8 taskId)
 {
-    static const u8 sStoneMaxStepCounts[DEOXYS_ROCK_LEVELS - 1] = { 4, 8, 8, 8, 4, 4, 4, 6, 3, 3 };
+    static const u8 sStoneMaxStepCounts[DEOXYS_ROCK_LEVELS - 1] = {4, 8, 8, 8, 4, 4, 4, 6, 3, 3};
 
     if (FlagGet(FLAG_DEOXYS_ROCK_COMPLETE) == TRUE)
     {
@@ -3430,8 +3372,7 @@ bool32 GetAbnormalWeatherMapNameAndType(void)
         MAP_NUM(MAP_ROUTE127),
         MAP_NUM(MAP_ROUTE127),
         MAP_NUM(MAP_ROUTE129),
-        MAP_NUM(MAP_ROUTE129)
-    };
+        MAP_NUM(MAP_ROUTE129)};
 
     u16 abnormalWeather = VarGet(VAR_ABNORMAL_WEATHER_LOCATION);
 
@@ -3447,24 +3388,23 @@ bool8 AbnormalWeatherHasExpired(void)
 {
     // Duplicate array.
     static const u8 sAbnormalWeatherMapNumbers[] =
-    {
-        MAP_NUM(MAP_ROUTE114),
-        MAP_NUM(MAP_ROUTE114),
-        MAP_NUM(MAP_ROUTE115),
-        MAP_NUM(MAP_ROUTE115),
-        MAP_NUM(MAP_ROUTE116),
-        MAP_NUM(MAP_ROUTE116),
-        MAP_NUM(MAP_ROUTE118),
-        MAP_NUM(MAP_ROUTE118),
-        MAP_NUM(MAP_ROUTE105),
-        MAP_NUM(MAP_ROUTE105),
-        MAP_NUM(MAP_ROUTE125),
-        MAP_NUM(MAP_ROUTE125),
-        MAP_NUM(MAP_ROUTE127),
-        MAP_NUM(MAP_ROUTE127),
-        MAP_NUM(MAP_ROUTE129),
-        MAP_NUM(MAP_ROUTE129)
-    };
+        {
+            MAP_NUM(MAP_ROUTE114),
+            MAP_NUM(MAP_ROUTE114),
+            MAP_NUM(MAP_ROUTE115),
+            MAP_NUM(MAP_ROUTE115),
+            MAP_NUM(MAP_ROUTE116),
+            MAP_NUM(MAP_ROUTE116),
+            MAP_NUM(MAP_ROUTE118),
+            MAP_NUM(MAP_ROUTE118),
+            MAP_NUM(MAP_ROUTE105),
+            MAP_NUM(MAP_ROUTE105),
+            MAP_NUM(MAP_ROUTE125),
+            MAP_NUM(MAP_ROUTE125),
+            MAP_NUM(MAP_ROUTE127),
+            MAP_NUM(MAP_ROUTE127),
+            MAP_NUM(MAP_ROUTE129),
+            MAP_NUM(MAP_ROUTE129)};
 
     u16 steps = VarGet(VAR_ABNORMAL_WEATHER_STEP_COUNTER);
     u16 abnormalWeather = VarGet(VAR_ABNORMAL_WEATHER_LOCATION);
@@ -3533,20 +3473,20 @@ void Unused_SetWeatherSunny(void)
 u32 GetMartEmployeeObjectEventId(void)
 {
     static const u8 sPokeMarts[][3] =
-    {
-        { MAP_GROUP(MAP_OLDALE_TOWN_MART),     MAP_NUM(MAP_OLDALE_TOWN_MART),     LOCALID_OLDALE_MART_CLERK },
-        { MAP_GROUP(MAP_LAVARIDGE_TOWN_MART),  MAP_NUM(MAP_LAVARIDGE_TOWN_MART),  LOCALID_LAVARIDGE_MART_CLERK },
-        { MAP_GROUP(MAP_FALLARBOR_TOWN_MART),  MAP_NUM(MAP_FALLARBOR_TOWN_MART),  LOCALID_FALLARBOR_MART_CLERK },
-        { MAP_GROUP(MAP_VERDANTURF_TOWN_MART), MAP_NUM(MAP_VERDANTURF_TOWN_MART), LOCALID_VERDANTURF_MART_CLERK },
-        { MAP_GROUP(MAP_PETALBURG_CITY_MART),  MAP_NUM(MAP_PETALBURG_CITY_MART),  LOCALID_PETALBURG_MART_CLERK },
-        { MAP_GROUP(MAP_SLATEPORT_CITY_MART),  MAP_NUM(MAP_SLATEPORT_CITY_MART),  LOCALID_SLATEPORT_MART_CLERK },
-        { MAP_GROUP(MAP_MAUVILLE_CITY_MART),   MAP_NUM(MAP_MAUVILLE_CITY_MART),   LOCALID_MAUVILLE_MART_CLERK },
-        { MAP_GROUP(MAP_RUSTBORO_CITY_MART),   MAP_NUM(MAP_RUSTBORO_CITY_MART),   LOCALID_RUSTBORO_MART_CLERK },
-        { MAP_GROUP(MAP_FORTREE_CITY_MART),    MAP_NUM(MAP_FORTREE_CITY_MART),    LOCALID_FORTREE_MART_CLERK },
-        { MAP_GROUP(MAP_MOSSDEEP_CITY_MART),   MAP_NUM(MAP_MOSSDEEP_CITY_MART),   LOCALID_MOSSDEEP_MART_CLERK },
-        { MAP_GROUP(MAP_SOOTOPOLIS_CITY_MART), MAP_NUM(MAP_SOOTOPOLIS_CITY_MART), LOCALID_SOOTOPOLIS_MART_CLERK },
-        { MAP_GROUP(MAP_BATTLE_FRONTIER_MART), MAP_NUM(MAP_BATTLE_FRONTIER_MART), LOCALID_FRONTIER_MART_CLERK },
-    };
+        {
+            {MAP_GROUP(MAP_OLDALE_TOWN_MART), MAP_NUM(MAP_OLDALE_TOWN_MART), LOCALID_OLDALE_MART_CLERK},
+            {MAP_GROUP(MAP_LAVARIDGE_TOWN_MART), MAP_NUM(MAP_LAVARIDGE_TOWN_MART), LOCALID_LAVARIDGE_MART_CLERK},
+            {MAP_GROUP(MAP_FALLARBOR_TOWN_MART), MAP_NUM(MAP_FALLARBOR_TOWN_MART), LOCALID_FALLARBOR_MART_CLERK},
+            {MAP_GROUP(MAP_VERDANTURF_TOWN_MART), MAP_NUM(MAP_VERDANTURF_TOWN_MART), LOCALID_VERDANTURF_MART_CLERK},
+            {MAP_GROUP(MAP_PETALBURG_CITY_MART), MAP_NUM(MAP_PETALBURG_CITY_MART), LOCALID_PETALBURG_MART_CLERK},
+            {MAP_GROUP(MAP_SLATEPORT_CITY_MART), MAP_NUM(MAP_SLATEPORT_CITY_MART), LOCALID_SLATEPORT_MART_CLERK},
+            {MAP_GROUP(MAP_MAUVILLE_CITY_MART), MAP_NUM(MAP_MAUVILLE_CITY_MART), LOCALID_MAUVILLE_MART_CLERK},
+            {MAP_GROUP(MAP_RUSTBORO_CITY_MART), MAP_NUM(MAP_RUSTBORO_CITY_MART), LOCALID_RUSTBORO_MART_CLERK},
+            {MAP_GROUP(MAP_FORTREE_CITY_MART), MAP_NUM(MAP_FORTREE_CITY_MART), LOCALID_FORTREE_MART_CLERK},
+            {MAP_GROUP(MAP_MOSSDEEP_CITY_MART), MAP_NUM(MAP_MOSSDEEP_CITY_MART), LOCALID_MOSSDEEP_MART_CLERK},
+            {MAP_GROUP(MAP_SOOTOPOLIS_CITY_MART), MAP_NUM(MAP_SOOTOPOLIS_CITY_MART), LOCALID_SOOTOPOLIS_MART_CLERK},
+            {MAP_GROUP(MAP_BATTLE_FRONTIER_MART), MAP_NUM(MAP_BATTLE_FRONTIER_MART), LOCALID_FRONTIER_MART_CLERK},
+        };
 
     u8 i;
     for (i = 0; i < ARRAY_COUNT(sPokeMarts); i++)
@@ -3638,14 +3578,11 @@ static void Task_LinkRetireStatusWithBattleTowerPartner(u8 taskId)
                 gSpecialVar_0x8005 = gBlockRecvBuffer[1][0];
                 ResetBlockReceivedFlag(1);
 
-                if (gSpecialVar_0x8004 == BATTLE_TOWER_LINK_RETIRE
-                 && gSpecialVar_0x8005 == BATTLE_TOWER_LINK_RETIRE)
+                if (gSpecialVar_0x8004 == BATTLE_TOWER_LINK_RETIRE && gSpecialVar_0x8005 == BATTLE_TOWER_LINK_RETIRE)
                     gSpecialVar_Result = BATTLE_TOWER_LINKSTAT_BOTH_RETIRE;
-                else if (gSpecialVar_0x8004 == BATTLE_TOWER_LINK_CONTINUE
-                      && gSpecialVar_0x8005 == BATTLE_TOWER_LINK_RETIRE)
+                else if (gSpecialVar_0x8004 == BATTLE_TOWER_LINK_CONTINUE && gSpecialVar_0x8005 == BATTLE_TOWER_LINK_RETIRE)
                     gSpecialVar_Result = BATTLE_TOWER_LINKSTAT_MEMBER_RETIRE;
-                else if (gSpecialVar_0x8004 == BATTLE_TOWER_LINK_RETIRE
-                      && gSpecialVar_0x8005 == BATTLE_TOWER_LINK_CONTINUE)
+                else if (gSpecialVar_0x8004 == BATTLE_TOWER_LINK_RETIRE && gSpecialVar_0x8005 == BATTLE_TOWER_LINK_CONTINUE)
                     gSpecialVar_Result = BATTLE_TOWER_LINKSTAT_LEADER_RETIRE;
                 else
                     gSpecialVar_Result = BATTLE_TOWER_LINKSTAT_CONTINUE;
@@ -3742,7 +3679,7 @@ void Script_DoRayquazaScene(void)
 }
 
 #define playCount data[0]
-#define delay     data[1]
+#define delay data[1]
 
 void LoopWingFlapSE(void)
 {
@@ -3771,7 +3708,7 @@ static void Task_LoopWingFlapSE(u8 taskId)
 
 #define CURTAIN_HEIGHT 4
 #define CURTAIN_WIDTH 3
-#define tFrameTimer   data
+#define tFrameTimer data
 #define tCurrentFrame data[3]
 
 void CloseBattlePikeCurtain(void)
@@ -3832,30 +3769,29 @@ void ResetHealLocationFromDewford(void)
 bool8 InPokemonCenter(void)
 {
     static const u16 sPokemonCenters[] =
-    {
-        MAP_OLDALE_TOWN_POKEMON_CENTER_1F,
-        MAP_DEWFORD_TOWN_POKEMON_CENTER_1F,
-        MAP_LAVARIDGE_TOWN_POKEMON_CENTER_1F,
-        MAP_FALLARBOR_TOWN_POKEMON_CENTER_1F,
-        MAP_VERDANTURF_TOWN_POKEMON_CENTER_1F,
-        MAP_PACIFIDLOG_TOWN_POKEMON_CENTER_1F,
-        MAP_PETALBURG_CITY_POKEMON_CENTER_1F,
-        MAP_SLATEPORT_CITY_POKEMON_CENTER_1F,
-        MAP_MAUVILLE_CITY_POKEMON_CENTER_1F,
-        MAP_RUSTBORO_CITY_POKEMON_CENTER_1F,
-        MAP_FORTREE_CITY_POKEMON_CENTER_1F,
-        MAP_LILYCOVE_CITY_POKEMON_CENTER_1F,
-        MAP_MOSSDEEP_CITY_POKEMON_CENTER_1F,
-        MAP_SOOTOPOLIS_CITY_POKEMON_CENTER_1F,
-        MAP_EVER_GRANDE_CITY_POKEMON_CENTER_1F,
-        MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F,
-        MAP_BATTLE_FRONTIER_POKEMON_CENTER_1F,
-        MAP_BATTLE_COLOSSEUM_2P,
-        MAP_TRADE_CENTER,
-        MAP_RECORD_CORNER,
-        MAP_BATTLE_COLOSSEUM_4P,
-        MAP_UNDEFINED
-    };
+        {
+            MAP_OLDALE_TOWN_POKEMON_CENTER_1F,
+            MAP_DEWFORD_TOWN_POKEMON_CENTER_1F,
+            MAP_LAVARIDGE_TOWN_POKEMON_CENTER_1F,
+            MAP_FALLARBOR_TOWN_POKEMON_CENTER_1F,
+            MAP_VERDANTURF_TOWN_POKEMON_CENTER_1F,
+            MAP_PACIFIDLOG_TOWN_POKEMON_CENTER_1F,
+            MAP_PETALBURG_CITY_POKEMON_CENTER_1F,
+            MAP_SLATEPORT_CITY_POKEMON_CENTER_1F,
+            MAP_MAUVILLE_CITY_POKEMON_CENTER_1F,
+            MAP_RUSTBORO_CITY_POKEMON_CENTER_1F,
+            MAP_FORTREE_CITY_POKEMON_CENTER_1F,
+            MAP_LILYCOVE_CITY_POKEMON_CENTER_1F,
+            MAP_MOSSDEEP_CITY_POKEMON_CENTER_1F,
+            MAP_SOOTOPOLIS_CITY_POKEMON_CENTER_1F,
+            MAP_EVER_GRANDE_CITY_POKEMON_CENTER_1F,
+            MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F,
+            MAP_BATTLE_FRONTIER_POKEMON_CENTER_1F,
+            MAP_BATTLE_COLOSSEUM_2P,
+            MAP_TRADE_CENTER,
+            MAP_RECORD_CORNER,
+            MAP_BATTLE_COLOSSEUM_4P,
+            MAP_UNDEFINED};
 
     int i;
     u16 map = (gSaveBlock1Ptr->location.mapGroup << 8) + gSaveBlock1Ptr->location.mapNum;
@@ -3900,16 +3836,16 @@ bool8 InPokemonCenter(void)
 */
 
 #define FANCLUB_BITFIELD (gSaveBlock1Ptr->vars[VAR_FANCLUB_FAN_COUNTER - VARS_START])
-#define FANCLUB_COUNTER    0x007F
+#define FANCLUB_COUNTER 0x007F
 
-#define GET_TRAINER_FAN_CLUB_FLAG(flag)  (FANCLUB_BITFIELD >> (flag) & 1)
-#define SET_TRAINER_FAN_CLUB_FLAG(flag)  (FANCLUB_BITFIELD |= 1 << (flag))
+#define GET_TRAINER_FAN_CLUB_FLAG(flag) (FANCLUB_BITFIELD >> (flag) & 1)
+#define SET_TRAINER_FAN_CLUB_FLAG(flag) (FANCLUB_BITFIELD |= 1 << (flag))
 #define FLIP_TRAINER_FAN_CLUB_FLAG(flag) (FANCLUB_BITFIELD ^= 1 << (flag))
 
-#define GET_TRAINER_FAN_CLUB_COUNTER         (FANCLUB_BITFIELD & FANCLUB_COUNTER)
-#define SET_TRAINER_FAN_CLUB_COUNTER(count)  (FANCLUB_BITFIELD = (FANCLUB_BITFIELD & ~FANCLUB_COUNTER) | (count))
+#define GET_TRAINER_FAN_CLUB_COUNTER (FANCLUB_BITFIELD & FANCLUB_COUNTER)
+#define SET_TRAINER_FAN_CLUB_COUNTER(count) (FANCLUB_BITFIELD = (FANCLUB_BITFIELD & ~FANCLUB_COUNTER) | (count))
 #define INCR_TRAINER_FAN_CLUB_COUNTER(count) (FANCLUB_BITFIELD += (count))
-#define CLEAR_TRAINER_FAN_CLUB_COUNTER       (FANCLUB_BITFIELD &= ~FANCLUB_COUNTER)
+#define CLEAR_TRAINER_FAN_CLUB_COUNTER (FANCLUB_BITFIELD &= ~FANCLUB_COUNTER)
 
 void ResetFanClub(void)
 {
@@ -3948,12 +3884,11 @@ void UpdateTrainerFanClubGameClear(void)
 u8 TryGainNewFanFromCounter(u8 incrementId)
 {
     static const u8 sCounterIncrements[] =
-    {
-        [FANCOUNTER_DEFEATED_DRAKE]    = 2,
-        [FANCOUNTER_BATTLED_AT_BASE]   = 1,
-        [FANCOUNTER_FINISHED_CONTEST]  = 2,
-        [FANCOUNTER_USED_BATTLE_TOWER] = 1
-    };
+        {
+            [FANCOUNTER_DEFEATED_DRAKE] = 2,
+            [FANCOUNTER_BATTLED_AT_BASE] = 1,
+            [FANCOUNTER_FINISHED_CONTEST] = 2,
+            [FANCOUNTER_USED_BATTLE_TOWER] = 1};
 
     if (VarGet(VAR_LILYCOVE_FAN_CLUB_STATE) == 2)
     {
@@ -3978,7 +3913,6 @@ u8 TryGainNewFanFromCounter(u8 incrementId)
     return GET_TRAINER_FAN_CLUB_COUNTER;
 }
 
-
 // Loop through the fan club members, and if theyre not a fan of the player there is a 50% chance for them to become a fan
 // Stops when a fan is gained
 // If no new fan was gained while looping, the last non-fan in the list becomes a fan
@@ -3986,16 +3920,15 @@ u8 TryGainNewFanFromCounter(u8 incrementId)
 static u16 PlayerGainRandomTrainerFan(void)
 {
     static const u8 sFanClubMemberIds[NUM_TRAINER_FAN_CLUB_MEMBERS] =
-    {
-        FANCLUB_MEMBER1,
-        FANCLUB_MEMBER2,
-        FANCLUB_MEMBER3,
-        FANCLUB_MEMBER4,
-        FANCLUB_MEMBER5,
-        FANCLUB_MEMBER6,
-        FANCLUB_MEMBER7,
-        FANCLUB_MEMBER8
-    };
+        {
+            FANCLUB_MEMBER1,
+            FANCLUB_MEMBER2,
+            FANCLUB_MEMBER3,
+            FANCLUB_MEMBER4,
+            FANCLUB_MEMBER5,
+            FANCLUB_MEMBER6,
+            FANCLUB_MEMBER7,
+            FANCLUB_MEMBER8};
 
     u8 i;
     u8 idx = 0;
@@ -4022,16 +3955,15 @@ static u16 PlayerGainRandomTrainerFan(void)
 static u16 PlayerLoseRandomTrainerFan(void)
 {
     static const u8 sFanClubMemberIds[NUM_TRAINER_FAN_CLUB_MEMBERS] =
-    {
-        FANCLUB_MEMBER1,
-        FANCLUB_MEMBER6,
-        FANCLUB_MEMBER7,
-        FANCLUB_MEMBER4,
-        FANCLUB_MEMBER3,
-        FANCLUB_MEMBER5,
-        FANCLUB_MEMBER8,
-        FANCLUB_MEMBER2
-    };
+        {
+            FANCLUB_MEMBER1,
+            FANCLUB_MEMBER6,
+            FANCLUB_MEMBER7,
+            FANCLUB_MEMBER4,
+            FANCLUB_MEMBER3,
+            FANCLUB_MEMBER5,
+            FANCLUB_MEMBER8,
+            FANCLUB_MEMBER2};
 
     u8 i;
     u8 idx = 0;
@@ -4149,7 +4081,7 @@ void BufferFanClubTrainerName(void)
     BufferFanClubTrainerName_(&gSaveBlock1Ptr->linkBattleRecords, whichLinkTrainer, whichNPCTrainer);
 #else
     BufferFanClubTrainerName_(whichLinkTrainer, whichNPCTrainer);
-#endif //FREE_LINK_BATTLE_RECORDS
+#endif // FREE_LINK_BATTLE_RECORDS
 }
 
 #if FREE_LINK_BATTLE_RECORDS == FALSE
@@ -4195,30 +4127,30 @@ static void BufferFanClubTrainerName_(u8 whichLinkTrainer, u8 whichNPCTrainer)
 {
     switch (whichNPCTrainer)
     {
-        case 0:
-            StringCopy(gStringVar1, gText_Wallace);
-            break;
-        case 1:
-            StringCopy(gStringVar1, gText_Steven);
-            break;
-        case 2:
-            StringCopy(gStringVar1, gText_Brawly);
-            break;
-        case 3:
-            StringCopy(gStringVar1, gText_Winona);
-            break;
-        case 4:
-            StringCopy(gStringVar1, gText_Phoebe);
-            break;
-        case 5:
-            StringCopy(gStringVar1, gText_Glacia);
-            break;
-        default:
-            StringCopy(gStringVar1, gText_Wallace);
-            break;
+    case 0:
+        StringCopy(gStringVar1, gText_Wallace);
+        break;
+    case 1:
+        StringCopy(gStringVar1, gText_Steven);
+        break;
+    case 2:
+        StringCopy(gStringVar1, gText_Brawly);
+        break;
+    case 3:
+        StringCopy(gStringVar1, gText_Winona);
+        break;
+    case 4:
+        StringCopy(gStringVar1, gText_Phoebe);
+        break;
+    case 5:
+        StringCopy(gStringVar1, gText_Glacia);
+        break;
+    default:
+        StringCopy(gStringVar1, gText_Wallace);
+        break;
     }
 }
-#endif //FREE_LINK_BATTLE_RECORDS
+#endif // FREE_LINK_BATTLE_RECORDS
 
 void UpdateTrainerFansAfterLinkBattle(void)
 {
@@ -4260,7 +4192,7 @@ void TrySkyBattle(void)
     }
     for (i = 0; i < CalculatePlayerPartyCount(); i++)
     {
-        struct Pokemon* pokemon = &gPlayerParty[i];
+        struct Pokemon *pokemon = &gPlayerParty[i];
         if (CanMonParticipateInSkyBattle(pokemon) && GetMonData(pokemon, MON_DATA_HP, NULL) > 0)
         {
             PreparePartyForSkyBattle();
@@ -4281,21 +4213,21 @@ void PreparePartyForSkyBattle(void)
 
     for (i = 0; i < partyCount; i++)
     {
-        struct Pokemon* pokemon = &gPlayerParty[i];
+        struct Pokemon *pokemon = &gPlayerParty[i];
 
         if (CanMonParticipateInSkyBattle(pokemon))
             participatingPokemonSlot += 1 << i;
         else
             ZeroMonData(pokemon);
     }
-    VarSet(B_VAR_SKY_BATTLE,participatingPokemonSlot);
+    VarSet(B_VAR_SKY_BATTLE, participatingPokemonSlot);
     CompactPartySlots();
 }
 
-void GetObjectPosition(u16* xPointer, u16* yPointer, u32 localId, u32 useTemplate)
+void GetObjectPosition(u16 *xPointer, u16 *yPointer, u32 localId, u32 useTemplate)
 {
     u32 objectId;
-    struct ObjectEvent* objEvent;
+    struct ObjectEvent *objEvent;
 
     if (useTemplate)
     {
@@ -4360,4 +4292,132 @@ void GetCodeFeedback(void)
         gSpecialVar_Result = 1;
     else
         gSpecialVar_Result = 0;
+}
+
+// Pokemon Center Nurse Experience Service Functions
+static void Task_MoneyInputForExp(u8 taskId);
+static void PrintExpMoneyAmount(u8 windowId, u16 amount);
+
+void GiveExpFromNurse(void)
+{
+    // VAR_0x8005 contains the party slot (0-5)
+    // VAR_0x8006 contains the money amount (which equals experience amount)
+
+    u32 cost = gSpecialVar_0x8006;
+    u32 playerMoney = GetMoney(&gSaveBlock1Ptr->money);
+
+    // Check if player has enough money
+    if (playerMoney < cost)
+    {
+        gSpecialVar_Result = FALSE; // Not enough money
+        return;
+    }
+
+    // Remove the money
+    RemoveMoney(&gSaveBlock1Ptr->money, cost);
+
+    // Give experience equal to the money spent
+    struct Pokemon *mon = &gPlayerParty[gSpecialVar_0x8005];
+    u32 currentExp = GetMonData(mon, MON_DATA_EXP, NULL);
+    u32 newExp = currentExp + gSpecialVar_0x8006;
+    SetMonData(mon, MON_DATA_EXP, &newExp);
+    CalculateMonStats(mon);
+
+    gSpecialVar_Result = TRUE; // Transaction successful
+}
+
+void MoneyInputForExp(void)
+{
+    u32 playerMoney = GetMoney(&gSaveBlock1Ptr->money);
+
+    // Start with minimum amount of $1, max is player's money or 9999
+    u16 maxAmount = (playerMoney > 9999) ? 9999 : (u16)playerMoney;
+
+    if (maxAmount == 0)
+    {
+        gSpecialVar_Result = FALSE; // No money
+        return;
+    }
+
+    // Create task to handle money input
+    u8 taskId = CreateTask(Task_MoneyInputForExp, 0);
+    gTasks[taskId].data[0] = 1;         // Current amount (start with $1)
+    gTasks[taskId].data[1] = maxAmount; // Max amount
+    gTasks[taskId].data[2] = 0;         // Window ID (will be set)
+}
+
+#define tAmount data[0]
+#define tMaxAmount data[1]
+#define tWindowId data[2]
+
+static void Task_MoneyInputForExp(u8 taskId)
+{
+    s16 *data = gTasks[taskId].data;
+
+    // Create window if not created yet
+    if (tWindowId == 0)
+    {
+        struct WindowTemplate template = {
+            .bg = 0,
+            .tilemapLeft = 1,
+            .tilemapTop = 1,
+            .width = 12,
+            .height = 4,
+            .paletteNum = 15,
+            .baseBlock = 1};
+
+        tWindowId = AddWindow(&template);
+        DrawStdWindowFrame(tWindowId, FALSE);
+        PrintExpMoneyAmount(tWindowId, tAmount);
+        CopyWindowToVram(tWindowId, COPYWIN_FULL);
+    }
+
+    // Handle input
+    if (AdjustQuantityAccordingToDPadInput(&tAmount, tMaxAmount) == TRUE)
+    {
+        // Amount changed, update display
+        PrintExpMoneyAmount(tWindowId, tAmount);
+        CopyWindowToVram(tWindowId, COPYWIN_GFX);
+        PlaySE(SE_SELECT);
+    }
+    else if (JOY_NEW(A_BUTTON))
+    {
+        // Confirm selection
+        gSpecialVar_0x8006 = tAmount;
+        gSpecialVar_Result = TRUE;
+
+        // Clean up
+        ClearStdWindowAndFrame(tWindowId, FALSE);
+        RemoveWindow(tWindowId);
+        DestroyTask(taskId);
+        PlaySE(SE_SELECT);
+        ScriptContext_Enable();
+    }
+    else if (JOY_NEW(B_BUTTON))
+    {
+        // Cancel
+        gSpecialVar_0x8006 = 0;
+        gSpecialVar_Result = FALSE;
+
+        // Clean up
+        ClearStdWindowAndFrame(tWindowId, FALSE);
+        RemoveWindow(tWindowId);
+        DestroyTask(taskId);
+        PlaySE(SE_SELECT);
+        ScriptContext_Enable();
+    }
+}
+
+static void PrintExpMoneyAmount(u8 windowId, u16 amount)
+{
+    static const u8 sText_MoneyToSpend[] = _("Give experience to POKéMON:");
+
+    u8 x;
+
+    // Print "Money to spend:" on first line
+    x = GetStringCenterAlignXOffset(FONT_NORMAL, sText_MoneyToSpend, 96);
+    AddTextPrinterParameterized(windowId, FONT_NORMAL, sText_MoneyToSpend, x, 1, TEXT_SKIP_DRAW, NULL);
+
+    // Print money amount on second line using the standard money printing function
+    PrintMoneyAmount(windowId, 24, 17, amount, TEXT_SKIP_DRAW);
 }
