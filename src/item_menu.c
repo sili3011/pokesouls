@@ -10,6 +10,7 @@
 #include "data.h"
 #include "decompress.h"
 #include "event_data.h"
+#include "event_object_lock.h"
 #include "event_object_movement.h"
 #include "event_scripts.h"
 #include "field_player_avatar.h"
@@ -18,6 +19,7 @@
 #include "gpu_regs.h"
 #include "international_string_util.h"
 #include "item.h"
+#include "item_icon.h"
 #include "item_menu_icons.h"
 #include "item_use.h"
 #include "lilycove_lady.h"
@@ -53,28 +55,33 @@
 #include "constants/songs.h"
 
 #define TAG_POCKET_SCROLL_ARROW 110
-#define TAG_BAG_SCROLL_ARROW    111
+#define TAG_BAG_SCROLL_ARROW 111
+// Immune to blending; doesn't conflict with tags in event_object_movement
+#define PAL_TAG_KEY_ITEM_WHEEL 0x9000
 
 // The buffer for the bag item list needs to be large enough to hold the maximum
 // number of item slots that could fit in a single pocket, + 1 for Cancel.
 // This constant picks the max of the existing pocket sizes.
 // By default, the largest pocket is BAG_TMHM_COUNT at 64.
-#define MAX_POCKET_ITEMS  ((max(BAG_TMHM_COUNT,              \
-                            max(BAG_BERRIES_COUNT,           \
-                            max(BAG_ITEMS_COUNT,             \
-                            max(BAG_KEYITEMS_COUNT,          \
-                                BAG_POKEBALLS_COUNT))))) + 1)
+#define MAX_POCKET_ITEMS ((max(BAG_TMHM_COUNT,                        \
+                               max(BAG_BERRIES_COUNT,                 \
+                                   max(BAG_ITEMS_COUNT,               \
+                                       max(BAG_KEYITEMS_COUNT,        \
+                                           BAG_POKEBALLS_COUNT))))) + \
+                          1)
 
 // Up to 8 item slots can be visible at a time
 #define MAX_ITEMS_SHOWN 8
 
-enum {
+enum
+{
     SWITCH_POCKET_NONE,
     SWITCH_POCKET_LEFT,
     SWITCH_POCKET_RIGHT
 };
 
-enum {
+enum
+{
     ACTION_USE,
     ACTION_TOSS,
     ACTION_REGISTER,
@@ -92,7 +99,8 @@ enum {
     ACTION_DUMMY,
 };
 
-enum {
+enum
+{
     WIN_ITEM_LIST,
     WIN_DESCRIPTION,
     WIN_POCKET_NAME,
@@ -104,15 +112,18 @@ enum {
 // Item list ID for toSwapPos to indicate an item is not currently being swapped
 #define NOT_SWAPPING 0xFF
 
-struct ListBuffer1 {
+struct ListBuffer1
+{
     struct ListMenuItem subBuffers[MAX_POCKET_ITEMS];
 };
 
-struct ListBuffer2 {
+struct ListBuffer2
+{
     u8 name[MAX_POCKET_ITEMS][max(ITEM_NAME_LENGTH, MOVE_NAME_LENGTH) + 15];
 };
 
-struct TempWallyBag {
+struct TempWallyBag
+{
     struct ItemSlot bagPocket_Items[BAG_ITEMS_COUNT];
     struct ItemSlot bagPocket_PokeBalls[BAG_POKEBALLS_COUNT];
     u16 cursorPosition[POCKETS_COUNT];
@@ -210,6 +221,10 @@ static void ConfirmToss(u8);
 static void CancelToss(u8);
 static void ConfirmSell(u8);
 static void CancelSell(u8);
+
+// Key item wheel
+static void Task_KeyItemWheel(u8 taskId);
+
 static void Task_FadeAndCloseBagMenuIfMulch(u8 taskId);
 
 static const u8 sText_Var1CantBeHeldHere[] = _("The {STR_VAR_1} can't be held\nhere.");
@@ -219,147 +234,133 @@ static const u8 sText_NoRoomForItems[] = _("There's no room to\nstore items.");
 static const u8 sText_CantStoreImportantItems[] = _("Important items\ncan't be stored in\nthe PC!");
 
 static const struct BgTemplate sBgTemplates_ItemMenu[] =
-{
     {
-        .bg = 0,
-        .charBaseIndex = 0,
-        .mapBaseIndex = 31,
-        .screenSize = 0,
-        .paletteMode = 0,
-        .priority = 1,
-        .baseTile = 0,
-    },
-    {
-        .bg = 1,
-        .charBaseIndex = 0,
-        .mapBaseIndex = 30,
-        .screenSize = 0,
-        .paletteMode = 0,
-        .priority = 0,
-        .baseTile = 0,
-    },
-    {
-        .bg = 2,
-        .charBaseIndex = 3,
-        .mapBaseIndex = 29,
-        .screenSize = 0,
-        .paletteMode = 0,
-        .priority = 2,
-        .baseTile = 0,
-    },
+        {
+            .bg = 0,
+            .charBaseIndex = 0,
+            .mapBaseIndex = 31,
+            .screenSize = 0,
+            .paletteMode = 0,
+            .priority = 1,
+            .baseTile = 0,
+        },
+        {
+            .bg = 1,
+            .charBaseIndex = 0,
+            .mapBaseIndex = 30,
+            .screenSize = 0,
+            .paletteMode = 0,
+            .priority = 0,
+            .baseTile = 0,
+        },
+        {
+            .bg = 2,
+            .charBaseIndex = 3,
+            .mapBaseIndex = 29,
+            .screenSize = 0,
+            .paletteMode = 0,
+            .priority = 2,
+            .baseTile = 0,
+        },
 };
 
 static const struct ListMenuTemplate sItemListMenu =
-{
-    .items = NULL,
-    .moveCursorFunc = BagMenu_MoveCursorCallback,
-    .itemPrintFunc = BagMenu_ItemPrintCallback,
-    .totalItems = 0,
-    .maxShowed = 0,
-    .windowId = WIN_ITEM_LIST,
-    .header_X = 0,
-    .item_X = 8,
-    .cursor_X = 0,
-    .upText_Y = 1,
-    .cursorPal = 1,
-    .fillValue = 0,
-    .cursorShadowPal = 3,
-    .lettersSpacing = 0,
-    .itemVerticalPadding = 0,
-    .scrollMultiple = LIST_NO_MULTIPLE_SCROLL,
-    .fontId = FONT_NARROW,
-    .cursorKind = CURSOR_BLACK_ARROW
-};
+    {
+        .items = NULL,
+        .moveCursorFunc = BagMenu_MoveCursorCallback,
+        .itemPrintFunc = BagMenu_ItemPrintCallback,
+        .totalItems = 0,
+        .maxShowed = 0,
+        .windowId = WIN_ITEM_LIST,
+        .header_X = 0,
+        .item_X = 8,
+        .cursor_X = 0,
+        .upText_Y = 1,
+        .cursorPal = 1,
+        .fillValue = 0,
+        .cursorShadowPal = 3,
+        .lettersSpacing = 0,
+        .itemVerticalPadding = 0,
+        .scrollMultiple = LIST_NO_MULTIPLE_SCROLL,
+        .fontId = FONT_NARROW,
+        .cursorKind = CURSOR_BLACK_ARROW};
 
 static const struct MenuAction sItemMenuActions[] = {
-    [ACTION_USE]               = {gMenuText_Use,                {ItemMenu_UseOutOfBattle}},
-    [ACTION_TOSS]              = {gMenuText_Toss,               {ItemMenu_Toss}},
-    [ACTION_REGISTER]          = {gMenuText_Register,           {ItemMenu_Register}},
-    [ACTION_GIVE]              = {gMenuText_Give,               {ItemMenu_Give}},
-    [ACTION_CANCEL]            = {gText_Cancel2,                {ItemMenu_Cancel}},
-    [ACTION_BATTLE_USE]        = {gMenuText_Use,                {ItemMenu_UseInBattle}},
-    [ACTION_CHECK]             = {COMPOUND_STRING("CHECK"),     {ItemMenu_UseOutOfBattle}},
-    [ACTION_WALK]              = {COMPOUND_STRING("WALK"),      {ItemMenu_UseOutOfBattle}},
-    [ACTION_DESELECT]          = {COMPOUND_STRING("DESELECT"),  {ItemMenu_Register}},
-    [ACTION_CHECK_TAG]         = {COMPOUND_STRING("CHECK TAG"), {ItemMenu_CheckTag}},
-    [ACTION_CONFIRM]           = {gMenuText_Confirm,            {Task_FadeAndCloseBagMenu}},
-    [ACTION_SHOW]              = {COMPOUND_STRING("SHOW"),      {ItemMenu_Show}},
-    [ACTION_GIVE_FAVOR_LADY]   = {gMenuText_Give2,              {ItemMenu_GiveFavorLady}},
-    [ACTION_CONFIRM_QUIZ_LADY] = {gMenuText_Confirm,            {ItemMenu_ConfirmQuizLady}},
-    [ACTION_DUMMY]             = {gText_EmptyString2, {NULL}}
-};
+    [ACTION_USE] = {gMenuText_Use, {ItemMenu_UseOutOfBattle}},
+    [ACTION_TOSS] = {gMenuText_Toss, {ItemMenu_Toss}},
+    [ACTION_REGISTER] = {gMenuText_Register, {ItemMenu_Register}},
+    [ACTION_GIVE] = {gMenuText_Give, {ItemMenu_Give}},
+    [ACTION_CANCEL] = {gText_Cancel2, {ItemMenu_Cancel}},
+    [ACTION_BATTLE_USE] = {gMenuText_Use, {ItemMenu_UseInBattle}},
+    [ACTION_CHECK] = {COMPOUND_STRING("CHECK"), {ItemMenu_UseOutOfBattle}},
+    [ACTION_WALK] = {COMPOUND_STRING("WALK"), {ItemMenu_UseOutOfBattle}},
+    [ACTION_DESELECT] = {COMPOUND_STRING("DESELECT"), {ItemMenu_Register}},
+    [ACTION_CHECK_TAG] = {COMPOUND_STRING("CHECK TAG"), {ItemMenu_CheckTag}},
+    [ACTION_CONFIRM] = {gMenuText_Confirm, {Task_FadeAndCloseBagMenu}},
+    [ACTION_SHOW] = {COMPOUND_STRING("SHOW"), {ItemMenu_Show}},
+    [ACTION_GIVE_FAVOR_LADY] = {gMenuText_Give2, {ItemMenu_GiveFavorLady}},
+    [ACTION_CONFIRM_QUIZ_LADY] = {gMenuText_Confirm, {ItemMenu_ConfirmQuizLady}},
+    [ACTION_DUMMY] = {gText_EmptyString2, {NULL}}};
 
 // these are all 2D arrays with a width of 2 but are represented as 1D arrays
 // ACTION_DUMMY is used to represent blank spaces
 static const u8 sContextMenuItems_ItemsPocket[] = {
-    ACTION_USE,         ACTION_GIVE,
-    ACTION_TOSS,        ACTION_CANCEL
-};
+    ACTION_USE, ACTION_GIVE,
+    ACTION_TOSS, ACTION_CANCEL};
 
 static const u8 sContextMenuItems_KeyItemsPocket[] = {
-    ACTION_USE,         ACTION_REGISTER,
-    ACTION_DUMMY,       ACTION_CANCEL
-};
+    ACTION_USE, ACTION_REGISTER,
+    ACTION_DUMMY, ACTION_CANCEL};
 
 static const u8 sContextMenuItems_BallsPocket[] = {
-    ACTION_GIVE,        ACTION_DUMMY,
-    ACTION_TOSS,        ACTION_CANCEL
-};
+    ACTION_GIVE, ACTION_DUMMY,
+    ACTION_TOSS, ACTION_CANCEL};
 
 static const u8 sContextMenuItems_TmHmPocket[] = {
-    ACTION_USE,         ACTION_GIVE,
-    ACTION_DUMMY,       ACTION_CANCEL
-};
+    ACTION_USE, ACTION_GIVE,
+    ACTION_DUMMY, ACTION_CANCEL};
 
 static const u8 sContextMenuItems_BerriesPocket[] = {
-    ACTION_CHECK_TAG,   ACTION_DUMMY,
-    ACTION_USE,         ACTION_GIVE,
-    ACTION_TOSS,        ACTION_CANCEL
-};
+    ACTION_CHECK_TAG, ACTION_DUMMY,
+    ACTION_USE, ACTION_GIVE,
+    ACTION_TOSS, ACTION_CANCEL};
 
 static const u8 sContextMenuItems_BattleUse[] = {
-    ACTION_BATTLE_USE,  ACTION_CANCEL
-};
+    ACTION_BATTLE_USE, ACTION_CANCEL};
 
 static const u8 sContextMenuItems_Give[] = {
-    ACTION_GIVE,        ACTION_CANCEL
-};
+    ACTION_GIVE, ACTION_CANCEL};
 
 static const u8 sContextMenuItems_Cancel[] = {
-    ACTION_CANCEL
-};
+    ACTION_CANCEL};
 
 static const u8 sContextMenuItems_BerryBlenderCrush[] = {
-    ACTION_CONFIRM,     ACTION_CHECK_TAG,
-    ACTION_DUMMY,       ACTION_CANCEL
-};
+    ACTION_CONFIRM, ACTION_CHECK_TAG,
+    ACTION_DUMMY, ACTION_CANCEL};
 
 static const u8 sContextMenuItems_Apprentice[] = {
-    ACTION_SHOW,        ACTION_CANCEL
-};
+    ACTION_SHOW, ACTION_CANCEL};
 
 static const u8 sContextMenuItems_FavorLady[] = {
-    ACTION_GIVE_FAVOR_LADY, ACTION_CANCEL
-};
+    ACTION_GIVE_FAVOR_LADY, ACTION_CANCEL};
 
 static const u8 sContextMenuItems_QuizLady[] = {
-    ACTION_CONFIRM_QUIZ_LADY, ACTION_CANCEL
-};
+    ACTION_CONFIRM_QUIZ_LADY, ACTION_CANCEL};
 
 static const TaskFunc sContextMenuFuncs[] = {
-    [ITEMMENULOCATION_FIELD] =                  Task_ItemContext_Normal,
-    [ITEMMENULOCATION_BATTLE] =                 Task_ItemContext_Normal,
-    [ITEMMENULOCATION_PARTY] =                  Task_ItemContext_GiveToParty,
-    [ITEMMENULOCATION_SHOP] =                   Task_ItemContext_Sell,
-    [ITEMMENULOCATION_BERRY_TREE] =             Task_FadeAndCloseBagMenu,
-    [ITEMMENULOCATION_BERRY_BLENDER_CRUSH] =    Task_ItemContext_Normal,
-    [ITEMMENULOCATION_ITEMPC] =                 Task_ItemContext_Deposit,
-    [ITEMMENULOCATION_FAVOR_LADY] =             Task_ItemContext_Normal,
-    [ITEMMENULOCATION_QUIZ_LADY] =              Task_ItemContext_Normal,
-    [ITEMMENULOCATION_APPRENTICE] =             Task_ItemContext_Normal,
-    [ITEMMENULOCATION_WALLY] =                  NULL,
-    [ITEMMENULOCATION_PCBOX] =                  Task_ItemContext_GiveToPC,
-    [ITEMMENULOCATION_BERRY_TREE_MULCH] =       Task_FadeAndCloseBagMenuIfMulch,
+    [ITEMMENULOCATION_FIELD] = Task_ItemContext_Normal,
+    [ITEMMENULOCATION_BATTLE] = Task_ItemContext_Normal,
+    [ITEMMENULOCATION_PARTY] = Task_ItemContext_GiveToParty,
+    [ITEMMENULOCATION_SHOP] = Task_ItemContext_Sell,
+    [ITEMMENULOCATION_BERRY_TREE] = Task_FadeAndCloseBagMenu,
+    [ITEMMENULOCATION_BERRY_BLENDER_CRUSH] = Task_ItemContext_Normal,
+    [ITEMMENULOCATION_ITEMPC] = Task_ItemContext_Deposit,
+    [ITEMMENULOCATION_FAVOR_LADY] = Task_ItemContext_Normal,
+    [ITEMMENULOCATION_QUIZ_LADY] = Task_ItemContext_Normal,
+    [ITEMMENULOCATION_APPRENTICE] = Task_ItemContext_Normal,
+    [ITEMMENULOCATION_WALLY] = NULL,
+    [ITEMMENULOCATION_PCBOX] = Task_ItemContext_GiveToPC,
+    [ITEMMENULOCATION_BERRY_TREE_MULCH] = Task_FadeAndCloseBagMenuIfMulch,
 };
 
 static const struct YesNoFuncTable sYesNoTossFunctions = {ConfirmToss, CancelToss};
@@ -380,9 +381,168 @@ static const struct ScrollArrowsTemplate sBagScrollArrowsTemplate = {
     .palNum = 0,
 };
 
-static const u8 sRegisteredSelect_Gfx[] = INCBIN_U8("graphics/bag/select_button.4bpp");
+// Key item wheel gfx
+static const u8 sRegisterUp_Gfx[] = INCBIN_U8("graphics/bag/select_button.4bpp");
+static const u8 sRegisterRight_Gfx[] = INCBIN_U8("graphics/bag/select_button_right.4bpp");
+static const u8 sRegisterDown_Gfx[] = INCBIN_U8("graphics/bag/select_button_down.4bpp");
+static const u8 sRegisterLeft_Gfx[] = INCBIN_U8("graphics/bag/select_button_left.4bpp");
 
-enum {
+static const u8 *const sRegisteredSelect_Gfx[] = {sRegisterUp_Gfx, sRegisterRight_Gfx, sRegisterDown_Gfx, sRegisterLeft_Gfx, sRegisterUp_Gfx};
+
+static const u32 sKeyItemBoxGfx[] = INCBIN_U32("graphics/bag/key_item_box.4bpp");
+static const u16 sKeyItemBoxPal[] = INCBIN_U16("graphics/bag/key_item_box.gbapal");
+
+static const struct SpritePalette sSpritePalette_KeyItemBox = {
+    .data = sKeyItemBoxPal,
+    .tag = PAL_TAG_KEY_ITEM_WHEEL,
+};
+
+static const struct SpriteFrameImage sPicTable_KeyItemBox[] = {
+    obj_frame_tiles(sKeyItemBoxGfx),
+};
+
+const struct OamData sOam_KeyItemBox = {
+    .shape = SPRITE_SHAPE(32x32),
+    .size = SPRITE_SIZE(32x32),
+    .priority = 1,
+    .objMode = ST_OAM_OBJ_BLEND,
+    .affineMode = ST_OAM_AFFINE_DOUBLE,
+};
+
+const struct OamData sOam_KeyItemBoxWin = {
+    .shape = SPRITE_SHAPE(32x32),
+    .size = SPRITE_SIZE(32x32),
+    .priority = 1,
+    .objMode = ST_OAM_OBJ_WINDOW,
+    .affineMode = ST_OAM_AFFINE_OFF,
+};
+
+static const union AnimCmd sSpriteAnim_KeyItemBox[] =
+    {
+        ANIMCMD_FRAME(0, 0),
+        ANIMCMD_END};
+
+static const union AnimCmd *const sSpriteAnimTable_KeyItemBox[] =
+    {
+        sSpriteAnim_KeyItemBox};
+
+static const union AffineAnimCmd sAffineAnim_KeyItemBox0[] =
+    {
+        AFFINEANIMCMD_FRAME(0x100, 0x100, 0, 0),
+        AFFINEANIMCMD_END,
+};
+
+static const union AffineAnimCmd sAffineAnim_KeyItemBox1[] =
+    {
+        AFFINEANIMCMD_FRAME(0x100, 0x100, 0xC0, 0),
+        AFFINEANIMCMD_END,
+};
+
+static const union AffineAnimCmd sAffineAnim_KeyItemBox2[] =
+    {
+        AFFINEANIMCMD_FRAME(0x100, 0x100, 0x80, 0),
+        AFFINEANIMCMD_END,
+};
+
+static const union AffineAnimCmd sAffineAnim_KeyItemBox3[] =
+    {
+        AFFINEANIMCMD_FRAME(0x100, 0x100, 0x40, 0),
+        AFFINEANIMCMD_END,
+};
+
+static const union AffineAnimCmd sAffineAnim_KeyItemBoxGrow0[] =
+    {
+        AFFINEANIMCMD_FRAME(0xE0, 0xE0, 0, 0),
+        AFFINEANIMCMD_FRAME(0xC0, 0xC0, 0, 0),
+        AFFINEANIMCMD_FRAME(0xE0, 0xE0, 0, 0),
+        AFFINEANIMCMD_FRAME(0x100, 0x100, 0, 0),
+        AFFINEANIMCMD_FRAME(0x110, 0x120, 0, 0),
+        AFFINEANIMCMD_FRAME(0x120, 0x120, 0, 0),
+        AFFINEANIMCMD_FRAME(0x110, 0x110, 0, 0),
+        AFFINEANIMCMD_FRAME(0x100, 0x100, 0, 0),
+        AFFINEANIMCMD_FRAME(0x100, 0x100, 0, 0),
+        AFFINEANIMCMD_END,
+};
+
+static const union AffineAnimCmd sAffineAnim_KeyItemBoxGrow1[] =
+    {
+        AFFINEANIMCMD_FRAME(0xE0, 0xE0, 0xC0, 0),
+        AFFINEANIMCMD_FRAME(0xC0, 0xC0, 0xC0, 0),
+        AFFINEANIMCMD_FRAME(0xE0, 0xE0, 0xC0, 0),
+        AFFINEANIMCMD_FRAME(0x100, 0x100, 0xC0, 0),
+        AFFINEANIMCMD_FRAME(0x110, 0x120, 0xC0, 0),
+        AFFINEANIMCMD_FRAME(0x120, 0x120, 0xC0, 0),
+        AFFINEANIMCMD_FRAME(0x110, 0x110, 0xC0, 0),
+        AFFINEANIMCMD_FRAME(0x100, 0x100, 0xC0, 0),
+        AFFINEANIMCMD_FRAME(0x100, 0x100, 0xC0, 0),
+        AFFINEANIMCMD_END,
+};
+
+static const union AffineAnimCmd sAffineAnim_KeyItemBoxGrow2[] =
+    {
+        AFFINEANIMCMD_FRAME(0xE0, 0xE0, 0x80, 0),
+        AFFINEANIMCMD_FRAME(0xC0, 0xC0, 0x80, 0),
+        AFFINEANIMCMD_FRAME(0xE0, 0xE0, 0x80, 0),
+        AFFINEANIMCMD_FRAME(0x100, 0x100, 0x80, 0),
+        AFFINEANIMCMD_FRAME(0x110, 0x120, 0x80, 0),
+        AFFINEANIMCMD_FRAME(0x120, 0x120, 0x80, 0),
+        AFFINEANIMCMD_FRAME(0x110, 0x110, 0x80, 0),
+        AFFINEANIMCMD_FRAME(0x100, 0x100, 0x80, 0),
+        AFFINEANIMCMD_FRAME(0x100, 0x100, 0x80, 0),
+        AFFINEANIMCMD_END,
+};
+
+static const union AffineAnimCmd sAffineAnim_KeyItemBoxGrow3[] =
+    {
+        AFFINEANIMCMD_FRAME(0xE0, 0xE0, 0x40, 0),
+        AFFINEANIMCMD_FRAME(0xC0, 0xC0, 0x40, 0),
+        AFFINEANIMCMD_FRAME(0xE0, 0xE0, 0x40, 0),
+        AFFINEANIMCMD_FRAME(0x100, 0x100, 0x40, 0),
+        AFFINEANIMCMD_FRAME(0x110, 0x120, 0x40, 0),
+        AFFINEANIMCMD_FRAME(0x120, 0x120, 0x40, 0),
+        AFFINEANIMCMD_FRAME(0x110, 0x110, 0x40, 0),
+        AFFINEANIMCMD_FRAME(0x100, 0x100, 0x40, 0),
+        AFFINEANIMCMD_FRAME(0x100, 0x100, 0x40, 0),
+        AFFINEANIMCMD_END,
+};
+
+static const union AffineAnimCmd *const sAffineAnims_KeyItemBox[] =
+    {
+        sAffineAnim_KeyItemBox0,
+        sAffineAnim_KeyItemBox1,
+        sAffineAnim_KeyItemBox2,
+        sAffineAnim_KeyItemBox3,
+        sAffineAnim_KeyItemBoxGrow0,
+        sAffineAnim_KeyItemBoxGrow1,
+        sAffineAnim_KeyItemBoxGrow2,
+        sAffineAnim_KeyItemBoxGrow3,
+};
+
+static const struct SpriteTemplate sSpriteTemplate_KeyItemBox = {
+    .tileTag = PAL_TAG_KEY_ITEM_WHEEL,
+    .paletteTag = PAL_TAG_KEY_ITEM_WHEEL,
+    .oam = &sOam_KeyItemBox,
+    .anims = sSpriteAnimTable_KeyItemBox,
+    .images = sPicTable_KeyItemBox,
+    .affineAnims = sAffineAnims_KeyItemBox,
+    .callback = SpriteCallbackDummy,
+};
+
+static const struct SpriteTemplate sSpriteTemplate_KeyItemBoxWin = {
+    .tileTag = PAL_TAG_KEY_ITEM_WHEEL,
+    .paletteTag = PAL_TAG_KEY_ITEM_WHEEL,
+    .oam = &sOam_KeyItemBoxWin,
+    .anims = sSpriteAnimTable_KeyItemBox,
+    .images = sPicTable_KeyItemBox,
+    .affineAnims = sAffineAnims_KeyItemBox,
+    .callback = SpriteCallbackDummy,
+};
+
+static const u8 sKeyItemBoxXPos[MAX_REGISTERED_ITEMS] = {(DISPLAY_WIDTH / 2), (DISPLAY_WIDTH / 2) + 32, (DISPLAY_WIDTH / 2), (DISPLAY_WIDTH / 2) - 32};
+static const u8 sKeyItemBoxYPos[MAX_REGISTERED_ITEMS] = {(DISPLAY_HEIGHT / 2) - 32, (DISPLAY_HEIGHT / 2), (DISPLAY_HEIGHT / 2) + 32, (DISPLAY_HEIGHT / 2)};
+
+enum
+{
     COLORID_NORMAL,
     COLORID_POCKET_NAME,
     COLORID_GRAY_CURSOR,
@@ -391,165 +551,168 @@ enum {
     COLORID_NONE = 0xFF
 };
 static const u8 sFontColorTable[][3] = {
-                            // bgColor, textColor, shadowColor
-    [COLORID_NORMAL]      = {TEXT_COLOR_TRANSPARENT, TEXT_COLOR_WHITE,      TEXT_COLOR_LIGHT_GRAY},
-    [COLORID_POCKET_NAME] = {TEXT_COLOR_TRANSPARENT, TEXT_COLOR_WHITE,      TEXT_COLOR_RED},
+    // bgColor, textColor, shadowColor
+    [COLORID_NORMAL] = {TEXT_COLOR_TRANSPARENT, TEXT_COLOR_WHITE, TEXT_COLOR_LIGHT_GRAY},
+    [COLORID_POCKET_NAME] = {TEXT_COLOR_TRANSPARENT, TEXT_COLOR_WHITE, TEXT_COLOR_RED},
     [COLORID_GRAY_CURSOR] = {TEXT_COLOR_TRANSPARENT, TEXT_COLOR_LIGHT_GRAY, TEXT_COLOR_GREEN},
-    [COLORID_UNUSED]      = {TEXT_COLOR_DARK_GRAY,   TEXT_COLOR_WHITE,      TEXT_COLOR_LIGHT_GRAY},
-    [COLORID_TMHM_INFO]   = {TEXT_COLOR_TRANSPARENT, TEXT_DYNAMIC_COLOR_5,  TEXT_DYNAMIC_COLOR_1}
-};
+    [COLORID_UNUSED] = {TEXT_COLOR_DARK_GRAY, TEXT_COLOR_WHITE, TEXT_COLOR_LIGHT_GRAY},
+    [COLORID_TMHM_INFO] = {TEXT_COLOR_TRANSPARENT, TEXT_DYNAMIC_COLOR_5, TEXT_DYNAMIC_COLOR_1}};
 
 static const struct WindowTemplate sDefaultBagWindows[] =
-{
-    [WIN_ITEM_LIST] = {
-        .bg = 0,
-        .tilemapLeft = 14,
-        .tilemapTop = 2,
-        .width = 15,
-        .height = 16,
-        .paletteNum = 1,
-        .baseBlock = 0x27,
-    },
-    [WIN_DESCRIPTION] = {
-        .bg = 0,
-        .tilemapLeft = 0,
-        .tilemapTop = 13,
-        .width = 14,
-        .height = 6,
-        .paletteNum = 1,
-        .baseBlock = 0x117,
-    },
-    [WIN_POCKET_NAME] = {
-        .bg = 0,
-        .tilemapLeft = 4,
-        .tilemapTop = 1,
-        .width = 8,
-        .height = 2,
-        .paletteNum = 1,
-        .baseBlock = 0x1A1,
-    },
-    [WIN_TMHM_INFO_ICONS] = {
-        .bg = 0,
-        .tilemapLeft = 1,
-        .tilemapTop = 13,
-        .width = 5,
-        .height = 6,
-        .paletteNum = 12,
-        .baseBlock = 0x16B,
-    },
-    [WIN_TMHM_INFO] = {
-        .bg = 0,
-        .tilemapLeft = 7,
-        .tilemapTop = 13,
-        .width = 4,
-        .height = 6,
-        .paletteNum = 12,
-        .baseBlock = 0x189,
-    },
-    [WIN_MESSAGE] = {
-        .bg = 1,
-        .tilemapLeft = 2,
-        .tilemapTop = 15,
-        .width = 27,
-        .height = 4,
-        .paletteNum = 15,
-        .baseBlock = 0x1B1,
-    },
-    DUMMY_WIN_TEMPLATE,
+    {
+        [WIN_ITEM_LIST] = {
+            .bg = 0,
+            .tilemapLeft = 14,
+            .tilemapTop = 2,
+            .width = 15,
+            .height = 16,
+            .paletteNum = 1,
+            .baseBlock = 0x27,
+        },
+        [WIN_DESCRIPTION] = {
+            .bg = 0,
+            .tilemapLeft = 0,
+            .tilemapTop = 13,
+            .width = 14,
+            .height = 6,
+            .paletteNum = 1,
+            .baseBlock = 0x117,
+        },
+        [WIN_POCKET_NAME] = {
+            .bg = 0,
+            .tilemapLeft = 4,
+            .tilemapTop = 1,
+            .width = 8,
+            .height = 2,
+            .paletteNum = 1,
+            .baseBlock = 0x1A1,
+        },
+        [WIN_TMHM_INFO_ICONS] = {
+            .bg = 0,
+            .tilemapLeft = 1,
+            .tilemapTop = 13,
+            .width = 5,
+            .height = 6,
+            .paletteNum = 12,
+            .baseBlock = 0x16B,
+        },
+        [WIN_TMHM_INFO] = {
+            .bg = 0,
+            .tilemapLeft = 7,
+            .tilemapTop = 13,
+            .width = 4,
+            .height = 6,
+            .paletteNum = 12,
+            .baseBlock = 0x189,
+        },
+        [WIN_MESSAGE] = {
+            .bg = 1,
+            .tilemapLeft = 2,
+            .tilemapTop = 15,
+            .width = 27,
+            .height = 4,
+            .paletteNum = 15,
+            .baseBlock = 0x1B1,
+        },
+        DUMMY_WIN_TEMPLATE,
 };
 
 static const struct WindowTemplate sContextMenuWindowTemplates[] =
-{
-    [ITEMWIN_1x1] = {
-        .bg = 1,
-        .tilemapLeft = 22,
-        .tilemapTop = 17,
-        .width = 7,
-        .height = 2,
-        .paletteNum = 15,
-        .baseBlock = 0x21D,
-    },
-    [ITEMWIN_1x2] = {
-        .bg = 1,
-        .tilemapLeft = 22,
-        .tilemapTop = 15,
-        .width = 7,
-        .height = 4,
-        .paletteNum = 15,
-        .baseBlock = 0x21D,
-    },
-    [ITEMWIN_2x2] = {
-        .bg = 1,
-        .tilemapLeft = 15,
-        .tilemapTop = 15,
-        .width = 14,
-        .height = 4,
-        .paletteNum = 15,
-        .baseBlock = 0x21D,
-    },
-    [ITEMWIN_2x3] = {
-        .bg = 1,
-        .tilemapLeft = 15,
-        .tilemapTop = 13,
-        .width = 14,
-        .height = 6,
-        .paletteNum = 15,
-        .baseBlock = 0x21D,
-    },
-    [ITEMWIN_MESSAGE] = {
-        .bg = 1,
-        .tilemapLeft = 2,
-        .tilemapTop = 15,
-        .width = 27,
-        .height = 4,
-        .paletteNum = 15,
-        .baseBlock = 0x1B1,
-    },
-    [ITEMWIN_YESNO_LOW] = { // Yes/No tucked in corner, for toss confirm
-        .bg = 1,
-        .tilemapLeft = 24,
-        .tilemapTop = 15,
-        .width = 5,
-        .height = 4,
-        .paletteNum = 15,
-        .baseBlock = 0x21D,
-    },
-    [ITEMWIN_YESNO_HIGH] = { // Yes/No higher up, positioned above a lower message box
-        .bg = 1,
-        .tilemapLeft = 21,
-        .tilemapTop = 9,
-        .width = 5,
-        .height = 4,
-        .paletteNum = 15,
-        .baseBlock = 0x21D,
-    },
-    [ITEMWIN_QUANTITY] = { // Used for quantity of items to Toss/Deposit
-        .bg = 1,
-        .tilemapLeft = 24,
-        .tilemapTop = 17,
-        .width = 5,
-        .height = 2,
-        .paletteNum = 15,
-        .baseBlock = 0x21D,
-    },
-    [ITEMWIN_QUANTITY_WIDE] = { // Used for quantity and price of items to Sell
-        .bg = 1,
-        .tilemapLeft = 18,
-        .tilemapTop = 11,
-        .width = 10,
-        .height = 2,
-        .paletteNum = 15,
-        .baseBlock = 0x245,
-    },
-    [ITEMWIN_MONEY] = {
-        .bg = 1,
-        .tilemapLeft = 1,
-        .tilemapTop = 1,
-        .width = 10,
-        .height = 2,
-        .paletteNum = 15,
-        .baseBlock = 0x231,
-    },
+    {
+        [ITEMWIN_1x1] = {
+            .bg = 1,
+            .tilemapLeft = 22,
+            .tilemapTop = 17,
+            .width = 7,
+            .height = 2,
+            .paletteNum = 15,
+            .baseBlock = 0x21D,
+        },
+        [ITEMWIN_1x2] = {
+            .bg = 1,
+            .tilemapLeft = 22,
+            .tilemapTop = 15,
+            .width = 7,
+            .height = 4,
+            .paletteNum = 15,
+            .baseBlock = 0x21D,
+        },
+        [ITEMWIN_2x2] = {
+            .bg = 1,
+            .tilemapLeft = 15,
+            .tilemapTop = 15,
+            .width = 14,
+            .height = 4,
+            .paletteNum = 15,
+            .baseBlock = 0x21D,
+        },
+        [ITEMWIN_2x3] = {
+            .bg = 1,
+            .tilemapLeft = 15,
+            .tilemapTop = 13,
+            .width = 14,
+            .height = 6,
+            .paletteNum = 15,
+            .baseBlock = 0x21D,
+        },
+        [ITEMWIN_MESSAGE] = {
+            .bg = 1,
+            .tilemapLeft = 2,
+            .tilemapTop = 15,
+            .width = 27,
+            .height = 4,
+            .paletteNum = 15,
+            .baseBlock = 0x1B1,
+        },
+        [ITEMWIN_YESNO_LOW] = {
+            // Yes/No tucked in corner, for toss confirm
+            .bg = 1,
+            .tilemapLeft = 24,
+            .tilemapTop = 15,
+            .width = 5,
+            .height = 4,
+            .paletteNum = 15,
+            .baseBlock = 0x21D,
+        },
+        [ITEMWIN_YESNO_HIGH] = {
+            // Yes/No higher up, positioned above a lower message box
+            .bg = 1,
+            .tilemapLeft = 21,
+            .tilemapTop = 9,
+            .width = 5,
+            .height = 4,
+            .paletteNum = 15,
+            .baseBlock = 0x21D,
+        },
+        [ITEMWIN_QUANTITY] = {
+            // Used for quantity of items to Toss/Deposit
+            .bg = 1,
+            .tilemapLeft = 24,
+            .tilemapTop = 17,
+            .width = 5,
+            .height = 2,
+            .paletteNum = 15,
+            .baseBlock = 0x21D,
+        },
+        [ITEMWIN_QUANTITY_WIDE] = {
+            // Used for quantity and price of items to Sell
+            .bg = 1,
+            .tilemapLeft = 18,
+            .tilemapTop = 11,
+            .width = 10,
+            .height = 2,
+            .paletteNum = 15,
+            .baseBlock = 0x245,
+        },
+        [ITEMWIN_MONEY] = {
+            .bg = 1,
+            .tilemapLeft = 1,
+            .tilemapTop = 1,
+            .width = 10,
+            .height = 2,
+            .paletteNum = 15,
+            .baseBlock = 0x231,
+        },
 };
 
 EWRAM_DATA struct BagMenu *gBagMenu = 0;
@@ -558,6 +721,11 @@ static EWRAM_DATA struct ListBuffer1 *sListBuffer1 = 0;
 static EWRAM_DATA struct ListBuffer2 *sListBuffer2 = 0;
 EWRAM_DATA u16 gSpecialVar_ItemId = 0;
 static EWRAM_DATA struct TempWallyBag *sTempWallyBag = 0;
+// used to hold the palette for each of the 4 key item wheel icons
+// so they can be scanline-copied into place or manipulated independently
+static EWRAM_DATA ALIGNED(4) u16 sKeyItemWheelExtraPalette[4][16] = {{0}};
+// Track last applied palette region for key item wheel (0xFF = invalid / force update)
+static u8 sKeyItemWheelPrevRegion;
 
 void ResetBagScrollPositions(void)
 {
@@ -626,7 +794,7 @@ void QuizLadyOpenBagMenu(void)
     gSpecialVar_Result = FALSE;
 }
 
-void GoToBagMenu(u8 location, u8 pocket, void ( *exitCallback)())
+void GoToBagMenu(u8 location, u8 pocket, void (*exitCallback)())
 {
     gBagMenu = AllocZeroed(sizeof(*gBagMenu));
     if (gBagMenu == NULL)
@@ -672,20 +840,21 @@ void VBlankCB_BagMenuRun(void)
     TransferPlttBuffer();
 }
 
-#define tListTaskId        data[0]
-#define tListPosition      data[1]
-#define tQuantity          data[2]
-#define tNeverRead         data[3]
-#define tItemCount         data[8]
-#define tMsgWindowId       data[10]
-#define tPocketSwitchDir   data[11]
+#define tListTaskId data[0]
+#define tListPosition data[1]
+#define tQuantity data[2]
+#define tNeverRead data[3]
+#define tItemCount data[8]
+#define tMsgWindowId data[10]
+#define tPocketSwitchDir data[11]
 #define tPocketSwitchTimer data[12]
 #define tPocketSwitchState data[13]
 
 static void CB2_Bag(void)
 {
-    while(MenuHelpers_ShouldWaitForLinkRecv() != TRUE && SetupBagMenu() != TRUE && MenuHelpers_IsLinkActive() != TRUE)
-        {};
+    while (MenuHelpers_ShouldWaitForLinkRecv() != TRUE && SetupBagMenu() != TRUE && MenuHelpers_IsLinkActive() != TRUE)
+    {
+    };
 }
 
 static bool8 SetupBagMenu(void)
@@ -954,9 +1123,9 @@ static void BagMenu_MoveCursorCallback(s32 itemIndex, bool8 onInit, struct ListM
     {
         RemoveBagItemIconSprite(gBagMenu->itemIconSlot ^ 1);
         if (itemIndex != LIST_CANCEL)
-           AddBagItemIconSprite(BagGetItemIdByPocketPosition(gBagPosition.pocket + 1, itemIndex), gBagMenu->itemIconSlot);
+            AddBagItemIconSprite(BagGetItemIdByPocketPosition(gBagPosition.pocket + 1, itemIndex), gBagMenu->itemIconSlot);
         else
-           AddBagItemIconSprite(ITEM_LIST_END, gBagMenu->itemIconSlot);
+            AddBagItemIconSprite(ITEM_LIST_END, gBagMenu->itemIconSlot);
         gBagMenu->itemIconSlot ^= 1;
         if (!gBagMenu->inhibitItemDescriptionPrint)
             PrintItemDescription(itemIndex);
@@ -967,7 +1136,7 @@ static void BagMenu_ItemPrintCallback(u8 windowId, u32 itemIndex, u8 y)
 {
     u16 itemId;
     u16 itemQuantity;
-    int offset;
+    s32 offset;
 
     if (itemIndex != LIST_CANCEL)
     {
@@ -995,11 +1164,10 @@ static void BagMenu_ItemPrintCallback(u8 windowId, u32 itemIndex, u8 y)
             offset = GetStringRightAlignXOffset(FONT_NARROW, gStringVar4, 119);
             BagMenu_Print(windowId, FONT_NARROW, gStringVar4, offset, y, 0, 0, TEXT_SKIP_DRAW, COLORID_NORMAL);
         }
-        else
+        else if (itemId && (offset = RegisteredItemIndex(itemId)) >= 0)
         {
             // Print registered icon
-            if (gSaveBlock1Ptr->registeredItem != ITEM_NONE && gSaveBlock1Ptr->registeredItem == itemId)
-                BlitBitmapToWindow(windowId, sRegisteredSelect_Gfx, 96, y - 1, 24, 16);
+            BlitBitmapToWindow(windowId, sRegisteredSelect_Gfx[offset], 96, y - 1, 24, 16);
         }
     }
 }
@@ -1033,7 +1201,6 @@ static void BagMenu_PrintCursorAtPos(u8 y, u8 colorIndex)
         FillWindowPixelRect(WIN_ITEM_LIST, PIXEL_FILL(0), 0, y, GetMenuCursorDimensionByFont(FONT_NORMAL, 0), GetMenuCursorDimensionByFont(FONT_NORMAL, 1));
     else
         BagMenu_Print(WIN_ITEM_LIST, FONT_NORMAL, gText_SelectorArrow2, 0, y, 0, 0, 0, colorIndex);
-
 }
 
 static void CreatePocketScrollArrowPair(void)
@@ -1443,12 +1610,10 @@ static void DrawPocketIndicatorSquare(u8 x, bool8 isCurrentPocket)
 static bool8 CanSwapItems(void)
 {
     // Swaps can only be done from the field or in battle (as opposed to while selling items, for example)
-    if (gBagPosition.location == ITEMMENULOCATION_FIELD
-     || gBagPosition.location == ITEMMENULOCATION_BATTLE)
+    if (gBagPosition.location == ITEMMENULOCATION_FIELD || gBagPosition.location == ITEMMENULOCATION_BATTLE)
     {
         // TMHMs and berries are numbered, and so may not be swapped
-        if (gBagPosition.pocket != TMHM_POCKET
-         && gBagPosition.pocket != BERRIES_POCKET)
+        if (gBagPosition.pocket != TMHM_POCKET && gBagPosition.pocket != BERRIES_POCKET)
             return TRUE;
     }
     return FALSE;
@@ -1644,7 +1809,7 @@ static void OpenContextMenu(u8 taskId)
                 gBagMenu->contextMenuItemsPtr = gBagMenu->contextMenuItemsBuffer;
                 gBagMenu->contextMenuNumItems = ARRAY_COUNT(sContextMenuItems_KeyItemsPocket);
                 memcpy(&gBagMenu->contextMenuItemsBuffer, &sContextMenuItems_KeyItemsPocket, sizeof(sContextMenuItems_KeyItemsPocket));
-                if (gSaveBlock1Ptr->registeredItem == gSpecialVar_ItemId)
+                if (RegisteredItemIndex(gSpecialVar_ItemId) >= 0)
                     gBagMenu->contextMenuItemsBuffer[1] = ACTION_DESELECT;
                 if (gSpecialVar_ItemId == ITEM_MACH_BIKE || gSpecialVar_ItemId == ITEM_ACRO_BIKE)
                 {
@@ -1898,6 +2063,50 @@ static void Task_ChooseHowManyToToss(u8 taskId)
     }
 }
 
+// Returns [1-4] based on dpad, or 0 otherwise
+static u32 DpadInputToRegisteredItemIndex(bool32 check)
+{
+    u32 i = 0;
+    if (JOY_NEW(DPAD_UP))
+        i = 1;
+    else if (JOY_NEW(DPAD_RIGHT))
+        i = 2;
+    else if (JOY_NEW(DPAD_DOWN))
+        i = 3;
+    else if (JOY_NEW(DPAD_LEFT))
+        i = 4;
+    // If `check`, verify that slot actually has an item registered
+    if (i && check && gSaveBlock1Ptr->registeredItems[i - 1] == ITEM_NONE)
+        i = 0;
+    return i;
+}
+
+static void Task_RegisterUsingDpad(u8 taskId)
+{
+    s16 *data = gTasks[taskId].data;
+    u16 *scrollPos = &gBagPosition.scrollPosition[gBagPosition.pocket];
+    u16 *cursorPos = &gBagPosition.cursorPosition[gBagPosition.pocket];
+    u32 i = 0;
+    if (JOY_NEW(B_BUTTON))
+    {
+        PlaySE(SE_SELECT);
+        ItemMenu_Cancel(taskId);
+        return;
+    }
+    i = DpadInputToRegisteredItemIndex(FALSE);
+    if (i == 0)
+        return;
+    PlaySE(SE_SELECT);
+    // register and refresh menu
+    gSaveBlock1Ptr->registeredItems[i - 1] = gSpecialVar_ItemId;
+    gSaveBlock1Ptr->registeredItemCompat = gSpecialVar_ItemId;
+    DestroyListMenuTask(tListTaskId, scrollPos, cursorPos);
+    LoadBagItemListBuffers(gBagPosition.pocket);
+    tListTaskId = ListMenuInit(&gMultiuseListMenuTemplate, *scrollPos, *cursorPos);
+    ScheduleBgCopyTilemapToVram(0);
+    ItemMenu_Cancel(taskId);
+}
+
 static void ConfirmToss(u8 taskId)
 {
     s16 *data = gTasks[taskId].data;
@@ -1933,21 +2142,77 @@ static void Task_RemoveItemFromBag(u8 taskId)
     }
 }
 
+static u32 CountRegisteredItems(void)
+{
+    u32 i;
+    u32 count = 0;
+    for (i = 0; i < ARRAY_COUNT(gSaveBlock1Ptr->registeredItems); i++)
+        if (gSaveBlock1Ptr->registeredItems[i] != ITEM_NONE)
+            count++;
+    // Fallback to vanilla registeredItem
+    if (count == 0 && gSaveBlock1Ptr->registeredItemCompat)
+    {
+        gSaveBlock1Ptr->registeredItems[0] = gSaveBlock1Ptr->registeredItemCompat;
+        count = 1;
+    }
+    return count;
+}
+
+// if passed ITEM_NONE, finds the first registered item's index
+s32 RegisteredItemIndex(u16 item)
+{
+    s32 i;
+    for (i = 0; i < ARRAY_COUNT(gSaveBlock1Ptr->registeredItems); i++)
+        if (gSaveBlock1Ptr->registeredItems[i] && (!item || gSaveBlock1Ptr->registeredItems[i] == item))
+            return i;
+    if (item && item == gSaveBlock1Ptr->registeredItemCompat)
+    {
+        gSaveBlock1Ptr->registeredItems[0] = item;
+        return 0;
+    }
+    return -1;
+}
+
 static void ItemMenu_Register(u8 taskId)
 {
     s16 *data = gTasks[taskId].data;
     u16 *scrollPos = &gBagPosition.scrollPosition[gBagPosition.pocket];
     u16 *cursorPos = &gBagPosition.cursorPosition[gBagPosition.pocket];
+    s32 index = RegisteredItemIndex(gSpecialVar_ItemId);
+    s32 count = CountRegisteredItems();
+    // unregister/deselect item
+    if (index >= 0)
+    {
+        gSaveBlock1Ptr->registeredItems[index] = ITEM_NONE;
+        // unregistering last item, index set to first registered item
+        if (--count == 0 || (index = RegisteredItemIndex(ITEM_NONE)) < 0)
+            gSaveBlock1Ptr->registeredItemCompat = ITEM_NONE;
+        else
+            gSaveBlock1Ptr->registeredItemCompat = gSaveBlock1Ptr->registeredItems[index];
+        index = 1; // ensure menu is closed
+        // no items registered; register this one in slot 0
+    }
+    else if (count == 0)
+    {
+        gSaveBlock1Ptr->registeredItems[0] = gSpecialVar_ItemId;
+        gSaveBlock1Ptr->registeredItemCompat = gSpecialVar_ItemId;
+    }
 
-    if (gSaveBlock1Ptr->registeredItem == gSpecialVar_ItemId)
-        gSaveBlock1Ptr->registeredItem = ITEM_NONE;
-    else
-        gSaveBlock1Ptr->registeredItem = gSpecialVar_ItemId;
-    DestroyListMenuTask(tListTaskId, scrollPos, cursorPos);
-    LoadBagItemListBuffers(gBagPosition.pocket);
-    tListTaskId = ListMenuInit(&gMultiuseListMenuTemplate, *scrollPos, *cursorPos);
-    ScheduleBgCopyTilemapToVram(0);
-    ItemMenu_Cancel(taskId);
+    // no DPAD required; just close the menu
+    if (index >= 0 || count == 0)
+    {
+        DestroyListMenuTask(tListTaskId, scrollPos, cursorPos);
+        LoadBagItemListBuffers(gBagPosition.pocket);
+        tListTaskId = ListMenuInit(&gMultiuseListMenuTemplate, *scrollPos, *cursorPos);
+        ScheduleBgCopyTilemapToVram(0);
+        ItemMenu_Cancel(taskId);
+        return;
+    }
+
+    // DPAD registration
+    FillWindowPixelBuffer(WIN_DESCRIPTION, PIXEL_FILL(0));
+    BagMenu_Print(WIN_DESCRIPTION, FONT_NORMAL, gText_PressAnyDpadKey, 3, 1, 0, 0, 0, COLORID_NORMAL);
+    gTasks[taskId].func = Task_RegisterUsingDpad;
 }
 
 static void ItemMenu_Give(u8 taskId)
@@ -2072,34 +2337,210 @@ static void Task_ItemContext_GiveToPC(u8 taskId)
 
 bool8 UseRegisteredKeyItemOnField(void)
 {
-    u8 taskId;
+    u32 taskId;
+    u32 i;
+    ItemUseFunc func = NULL;
 
     if (InUnionRoom() == TRUE || CurrentBattlePyramidLocation() != PYRAMID_LOCATION_NONE || InBattlePike() || InMultiPartnerRoom() == TRUE)
         return FALSE;
     HideMapNamePopUpWindow();
     ChangeBgY_ScreenOff(0, 0, BG_COORD_SET);
-    if (gSaveBlock1Ptr->registeredItem != ITEM_NONE)
+    i = CountRegisteredItems();
+    // Show key item wheel
+    if (i > 1)
     {
-        if (CheckBagHasItem(gSaveBlock1Ptr->registeredItem, 1) == TRUE)
+        func = Task_KeyItemWheel;
+        // Use the only registered item
+    }
+    else if (i > 0)
+    {
+        if (CheckBagHasItem(gSaveBlock1Ptr->registeredItemCompat, 1) == TRUE)
         {
-            LockPlayerFieldControls();
-            FreezeObjectEvents();
-            PlayerFreeze();
-            StopPlayerAvatar();
-            gSpecialVar_ItemId = gSaveBlock1Ptr->registeredItem;
-            taskId = CreateTask(GetItemFieldFunc(gSaveBlock1Ptr->registeredItem), 8);
-            gTasks[taskId].tUsingRegisteredKeyItem = TRUE;
-            return TRUE;
+            gSpecialVar_ItemId = gSaveBlock1Ptr->registeredItemCompat;
+            func = GetItemFieldFunc(gSaveBlock1Ptr->registeredItemCompat);
         }
         else
         {
-            gSaveBlock1Ptr->registeredItem = ITEM_NONE;
+            gSaveBlock1Ptr->registeredItemCompat = ITEM_NONE;
         }
+    }
+    if (func)
+    {
+        LockPlayerFieldControls();
+        FreezeObjectEvents();
+        PlayerFreeze();
+        StopPlayerAvatar();
+        taskId = CreateTask(func, 8);
+        gTasks[taskId].tUsingRegisteredKeyItem = TRUE;
+        return TRUE;
     }
     ScriptContext_SetupScript(EventScript_SelectWithoutRegisteredItem);
     return TRUE;
 }
 
+// Regions for key item wheel palette swaps:
+// 0 = top icon (index 0)   : scanlines < mid - 16
+// 1 = middle row (icons 3 & 1 share scanlines): mid - 16 .. mid + 15
+// 2 = bottom icon (index 2): scanlines >= mid + 16
+static void HBlankCB_KeyItemWheel(void)
+{
+    if (REG_VCOUNT >= DISPLAY_HEIGHT)
+        return; // Outside visible area
+
+    u16 vcount = REG_VCOUNT;
+    u16 mid = DISPLAY_HEIGHT / 2; // 80 on a 160px tall screen
+    u8 region;
+
+    if (vcount < mid - 16)
+        region = 0; // Top icon area
+    else if (vcount < mid + 16)
+        region = 1; // Middle row (left & right icons simultaneously)
+    else
+        region = 2; // Bottom icon area
+
+    if (region == sKeyItemWheelPrevRegion)
+        return; // Nothing to update this scanline
+
+    sKeyItemWheelPrevRegion = region;
+
+    switch (region)
+    {
+    case 0: // Top icon uses palette slot 13
+        CpuCopy16(sKeyItemWheelExtraPalette[0], (void *)(BG_PLTT + PLTT_ID(13) * 2), PLTT_SIZE_4BPP);
+        break;
+    case 1: // Middle row: need both left (index 3) and right (index 1)
+        CpuCopy16(sKeyItemWheelExtraPalette[3], (void *)(BG_PLTT + PLTT_ID(13) * 2), PLTT_SIZE_4BPP);
+        CpuCopy16(sKeyItemWheelExtraPalette[1], (void *)(BG_PLTT + PLTT_ID(14) * 2), PLTT_SIZE_4BPP);
+        break;
+    case 2: // Bottom icon uses palette slot 13
+        CpuCopy16(sKeyItemWheelExtraPalette[2], (void *)(BG_PLTT + PLTT_ID(13) * 2), PLTT_SIZE_4BPP);
+        break;
+    }
+}
+
+#define tState data[0]
+// MAX_REGISTERED_ITEMS box sprites
+#define tBoxSprite (data + 1)
+#define tBoxWinSprite (data + 1 + MAX_REGISTERED_ITEMS)
+// MAX_REGISTERED_ITEMS icon windows
+#define tIconWindow (data + 1 + 2 * MAX_REGISTERED_ITEMS)
+
+// Free key item wheel gfx using sprites & windows from task data
+static void FreeKeyItemWheelGfx(s16 *data)
+{
+    u32 i;
+    struct Sprite *sprite;
+    FreeSpriteTilesByTag(PAL_TAG_KEY_ITEM_WHEEL);
+    FreeSpritePaletteByTag(PAL_TAG_KEY_ITEM_WHEEL);
+    // free box sprites
+    for (i = 0; i < 2 * MAX_REGISTERED_ITEMS; i++)
+    {
+        if (tBoxSprite[i] >= MAX_SPRITES)
+            continue;
+        sprite = &gSprites[tBoxSprite[i]];
+        FreeSpriteOamMatrix(sprite);
+        DestroySprite(sprite);
+    }
+    // free item windows
+    for (i = 0; i < MAX_REGISTERED_ITEMS; i++)
+    {
+        if (tIconWindow[i] == WINDOW_NONE)
+            continue;
+        FillWindowPixelBuffer(tIconWindow[i], 0);
+        ClearWindowTilemap(tIconWindow[i]);
+        CopyWindowToVram(tIconWindow[i], COPYWIN_MAP);
+        RemoveWindow(tIconWindow[i]);
+    }
+    SetHBlankCallback(NULL);
+    DisableInterrupts(INTR_FLAG_HBLANK);
+}
+
+static void Task_KeyItemWheel(u8 taskId)
+{
+    u32 i, j;
+    s16 *data = gTasks[taskId].data;
+    switch (tState)
+    {
+    case 0:
+    {
+        sKeyItemWheelPrevRegion = 0xFF; // Force palette update on first HBlank
+        LoadSpritePalette(&sSpritePalette_KeyItemBox);
+        LoadSpriteSheetByTemplate(&sSpriteTemplate_KeyItemBox, 0, 0);
+
+        for (i = 0; i < MAX_REGISTERED_ITEMS; i++)
+        {
+            // Create box sprite
+            tBoxSprite[i] = j = CreateSprite(&sSpriteTemplate_KeyItemBox, sKeyItemBoxXPos[i], sKeyItemBoxYPos[i], 0);
+            if (j < MAX_SPRITES)
+                StartSpriteAffineAnim(&gSprites[j], i);
+            tBoxWinSprite[i] = MAX_SPRITES;
+            // For each registered item the player has, create a window and blit its icon to it
+            tIconWindow[i] = WINDOW_NONE;
+            if (!gSaveBlock1Ptr->registeredItems[i] || !CheckBagHasItem(gSaveBlock1Ptr->registeredItems[i], 1))
+                continue;
+            u8 palNum = (i == 1) ? 14 : 13; // Right icon uses palette 14, others use 13
+            tIconWindow[i] = j = AddWindowParameterized(0, sKeyItemBoxXPos[i] / 8 - 2, sKeyItemBoxYPos[i] / 8 - 2, 4, 4, palNum, 16 * (i + 9));
+            if (j == WINDOW_NONE)
+                continue;
+            PutWindowTilemap(j);
+            BlitItemIconToWindow(gSaveBlock1Ptr->registeredItems[i], j, 4, 4, sKeyItemWheelExtraPalette[i]);
+            CopyWindowToVram(j, COPYWIN_FULL);
+        }
+        SetHBlankCallback(HBlankCB_KeyItemWheel);
+        EnableInterrupts(INTR_FLAG_HBLANK);
+        PlaySE(SE_WIN_OPEN);
+        // in dark caves, we need to spawn OBJWIN sprites to show the boxes
+        tState = (gSaveBlock1Ptr->flashLevel > 1) ? 4 : 1;
+        break;
+    }
+    case 1: // process input
+    {
+        if (JOY_NEW(B_BUTTON) || JOY_NEW(SELECT_BUTTON))
+        {
+            PlaySE(SE_SELECT);
+            tState = 3; // destroy and unfreeze
+            break;
+        }
+        i = DpadInputToRegisteredItemIndex(TRUE);
+        if (i == 0 || data[i] == MAX_SPRITES)
+            break;
+        // use item as if it was registered
+        gSpecialVar_ItemId = gSaveBlock1Ptr->registeredItemCompat = gSaveBlock1Ptr->registeredItems[i - 1];
+        PlaySE(SE_SELECT);
+        StartSpriteAffineAnim(&gSprites[data[i]], i + 4 - 1);
+        data[15] = data[i];
+        tState = 2; // wait for anim
+        break;
+    }
+    case 2:
+        if (!gSprites[data[15]].affineAnimEnded)
+            break;
+        FreeKeyItemWheelGfx(data);
+        i = CreateTask(GetItemFieldFunc(gSaveBlock1Ptr->registeredItemCompat), 8);
+        gTasks[i].tUsingRegisteredKeyItem = TRUE;
+        DestroyTask(taskId);
+        break;
+    case 3:
+        FreeKeyItemWheelGfx(data);
+        ScriptUnfreezeObjectEvents();
+        UnlockPlayerFieldControls();
+        DestroyTask(taskId);
+        break;
+    case 4:
+        // Enable sprites to be shown inside WINOBJ
+        SetGpuRegBits(REG_OFFSET_DISPCNT, DISPCNT_OBJWIN_ON);
+        SetGpuRegBits(REG_OFFSET_WINOUT, WINOUT_WINOBJ_OBJ);
+        // Create box sprites, but in OBJWIN mode
+        for (i = 0; i < MAX_REGISTERED_ITEMS; i++)
+            tBoxWinSprite[i] = CreateSprite(&sSpriteTemplate_KeyItemBoxWin, sKeyItemBoxXPos[i], sKeyItemBoxYPos[i], 0);
+        tState = 1;
+        break;
+    }
+}
+
+#undef tState
+#undef tBoxSprite
+#undef tIconWindow
 #undef tUsingRegisteredKeyItem
 
 static void Task_ItemContext_Sell(u8 taskId)
@@ -2474,7 +2915,7 @@ static void PrintPocketNames(const u8 *pocketName1, const u8 *pocketName2)
 
 static void CopyPocketNameToWindow(u32 a)
 {
-    u8 (*tileDataBuffer)[32][32];
+    u8(*tileDataBuffer)[32][32];
     u8 *windowTileData;
     int b;
     if (a > 8)
