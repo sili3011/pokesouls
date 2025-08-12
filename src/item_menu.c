@@ -721,11 +721,11 @@ static EWRAM_DATA struct ListBuffer1 *sListBuffer1 = 0;
 static EWRAM_DATA struct ListBuffer2 *sListBuffer2 = 0;
 EWRAM_DATA u16 gSpecialVar_ItemId = 0;
 static EWRAM_DATA struct TempWallyBag *sTempWallyBag = 0;
-// used to hold the palette for the 4th (clockwise) item in the key item wheel
-// so it can be scanline-copied into place
-// This could be 12 bytes smaller if we used AllocZeroed,
-// but that isn't really a lot of space
-static EWRAM_DATA ALIGNED(4) u16 sKeyItemWheelExtraPalette[16] = {0};
+// used to hold the palette for each of the 4 key item wheel icons
+// so they can be scanline-copied into place or manipulated independently
+static EWRAM_DATA ALIGNED(4) u16 sKeyItemWheelExtraPalette[4][16] = {{0}};
+// Track last applied palette region for key item wheel (0xFF = invalid / force update)
+static u8 sKeyItemWheelPrevRegion;
 
 void ResetBagScrollPositions(void)
 {
@@ -2357,7 +2357,7 @@ bool8 UseRegisteredKeyItemOnField(void)
         if (CheckBagHasItem(gSaveBlock1Ptr->registeredItemCompat, 1) == TRUE)
         {
             gSpecialVar_ItemId = gSaveBlock1Ptr->registeredItemCompat;
-            func = ItemId_GetFieldFunc(gSaveBlock1Ptr->registeredItemCompat);
+            func = GetItemFieldFunc(gSaveBlock1Ptr->registeredItemCompat);
         }
         else
         {
@@ -2378,19 +2378,43 @@ bool8 UseRegisteredKeyItemOnField(void)
     return TRUE;
 }
 
+// Regions for key item wheel palette swaps:
+// 0 = top icon (index 0)   : scanlines < mid - 16
+// 1 = middle row (icons 3 & 1 share scanlines): mid - 16 .. mid + 15
+// 2 = bottom icon (index 2): scanlines >= mid + 16
 static void HBlankCB_KeyItemWheel(void)
 {
-    u32 vCount = REG_VCOUNT;
-    if (vCount >= DISPLAY_HEIGHT)
+    if (REG_VCOUNT >= DISPLAY_HEIGHT)
+        return; // Outside visible area
+
+    u16 vcount = REG_VCOUNT;
+    u16 mid = DISPLAY_HEIGHT / 2; // 80 on a 160px tall screen
+    u8 region;
+
+    if (vcount < mid - 16)
+        region = 0; // Top icon area
+    else if (vcount < mid + 16)
+        region = 1; // Middle row (left & right icons simultaneously)
+    else
+        region = 2; // Bottom icon area
+
+    if (region == sKeyItemWheelPrevRegion)
+        return; // Nothing to update this scanline
+
+    sKeyItemWheelPrevRegion = region;
+
+    switch (region)
     {
-        sKeyItemWheelExtraPalette[0] = 0;
-        return;
-    }
-    // Copy item 3
-    if (vCount >= 64 && sKeyItemWheelExtraPalette[0] == 0)
-    {
-        CpuFastCopy(sKeyItemWheelExtraPalette, (u32 *)(BG_PLTT + PLTT_ID(13) * 2), PLTT_SIZE_4BPP);
-        sKeyItemWheelExtraPalette[0] = 0x8000;
+    case 0: // Top icon uses palette slot 13
+        CpuCopy16(sKeyItemWheelExtraPalette[0], (void *)(BG_PLTT + PLTT_ID(13) * 2), PLTT_SIZE_4BPP);
+        break;
+    case 1: // Middle row: need both left (index 3) and right (index 1)
+        CpuCopy16(sKeyItemWheelExtraPalette[3], (void *)(BG_PLTT + PLTT_ID(13) * 2), PLTT_SIZE_4BPP);
+        CpuCopy16(sKeyItemWheelExtraPalette[1], (void *)(BG_PLTT + PLTT_ID(14) * 2), PLTT_SIZE_4BPP);
+        break;
+    case 2: // Bottom icon uses palette slot 13
+        CpuCopy16(sKeyItemWheelExtraPalette[2], (void *)(BG_PLTT + PLTT_ID(13) * 2), PLTT_SIZE_4BPP);
+        break;
     }
 }
 
@@ -2435,13 +2459,13 @@ static void Task_KeyItemWheel(u8 taskId)
 {
     u32 i, j;
     s16 *data = gTasks[taskId].data;
-    struct Sprite *sprite;
     switch (tState)
     {
     case 0:
     {
+        sKeyItemWheelPrevRegion = 0xFF; // Force palette update on first HBlank
         LoadSpritePalette(&sSpritePalette_KeyItemBox);
-        LoadSpriteSheetByTemplate(&sSpriteTemplate_KeyItemBox, 0);
+        LoadSpriteSheetByTemplate(&sSpriteTemplate_KeyItemBox, 0, 0);
 
         for (i = 0; i < MAX_REGISTERED_ITEMS; i++)
         {
@@ -2454,11 +2478,12 @@ static void Task_KeyItemWheel(u8 taskId)
             tIconWindow[i] = WINDOW_NONE;
             if (!gSaveBlock1Ptr->registeredItems[i] || !CheckBagHasItem(gSaveBlock1Ptr->registeredItems[i], 1))
                 continue;
-            tIconWindow[i] = j = AddWindowParameterized(0, sKeyItemBoxXPos[i] / 8 - 2, sKeyItemBoxYPos[i] / 8 - 2, 4, 4, i == 3 ? 13 : 13 + i, 16 * (i + 9));
+            u8 palNum = (i == 1) ? 14 : 13; // Right icon uses palette 14, others use 13
+            tIconWindow[i] = j = AddWindowParameterized(0, sKeyItemBoxXPos[i] / 8 - 2, sKeyItemBoxYPos[i] / 8 - 2, 4, 4, palNum, 16 * (i + 9));
             if (j == WINDOW_NONE)
                 continue;
             PutWindowTilemap(j);
-            BlitItemIconToWindow(gSaveBlock1Ptr->registeredItems[i], j, 4, 4, i == 3 ? sKeyItemWheelExtraPalette : NULL);
+            BlitItemIconToWindow(gSaveBlock1Ptr->registeredItems[i], j, 4, 4, sKeyItemWheelExtraPalette[i]);
             CopyWindowToVram(j, COPYWIN_FULL);
         }
         SetHBlankCallback(HBlankCB_KeyItemWheel);
@@ -2491,7 +2516,7 @@ static void Task_KeyItemWheel(u8 taskId)
         if (!gSprites[data[15]].affineAnimEnded)
             break;
         FreeKeyItemWheelGfx(data);
-        i = CreateTask(ItemId_GetFieldFunc(gSaveBlock1Ptr->registeredItemCompat), 8);
+        i = CreateTask(GetItemFieldFunc(gSaveBlock1Ptr->registeredItemCompat), 8);
         gTasks[i].tUsingRegisteredKeyItem = TRUE;
         DestroyTask(taskId);
         break;
@@ -2516,28 +2541,6 @@ static void Task_KeyItemWheel(u8 taskId)
 #undef tState
 #undef tBoxSprite
 #undef tIconWindow
-if (gSaveBlock1Ptr->registeredItem != ITEM_NONE)
-{
-    if (CheckBagHasItem(gSaveBlock1Ptr->registeredItem, 1) == TRUE)
-    {
-        LockPlayerFieldControls();
-        FreezeObjectEvents();
-        PlayerFreeze();
-        StopPlayerAvatar();
-        gSpecialVar_ItemId = gSaveBlock1Ptr->registeredItem;
-        taskId = CreateTask(GetItemFieldFunc(gSaveBlock1Ptr->registeredItem), 8);
-        gTasks[taskId].tUsingRegisteredKeyItem = TRUE;
-        return TRUE;
-    }
-    else
-    {
-        gSaveBlock1Ptr->registeredItem = ITEM_NONE;
-    }
-}
-ScriptContext_SetupScript(EventScript_SelectWithoutRegisteredItem);
-return TRUE;
-}
-
 #undef tUsingRegisteredKeyItem
 
 static void Task_ItemContext_Sell(u8 taskId)
