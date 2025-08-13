@@ -19,6 +19,7 @@
 #include "field_weather.h"
 #include "graphics.h"
 #include "international_string_util.h"
+#include "item.h"
 #include "item_icon.h"
 #include "link.h"
 #include "load_save.h"
@@ -4527,5 +4528,14 @@ static void PrintPokemonPreview(u8 windowId, u8 partySlot, u16 expAmount)
     else
     {
         AddTextPrinterParameterized(windowId, FONT_NORMAL, gStringVar2, 72, 50, TEXT_SKIP_DRAW, NULL);
+    }
+}
+
+// Refills the Potion Flask uses back to 3
+void RefillPotionFlask(void)
+{
+    if (CheckBagHasItem(ITEM_POTION_FLASK, 1))
+    {
+        VarSet(VAR_POTION_FLASK_USES, 3);
     }
 }
