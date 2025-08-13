@@ -22,8 +22,7 @@ gText_NotEnoughMoney::
 	.string "enough for that.$"
 
 gText_ExpGained::
-	.string "{STR_VAR_1} gained {STR_VAR_2} EXP\n"
-	.string "for ${STR_VAR_2}!$"
+	.string "{STR_VAR_1} grew stronger!$"
 
 gText_IllTakeYourPkmn::
 	.string "Okay, I'll take your POKéMON\n"

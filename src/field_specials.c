@@ -34,6 +34,7 @@
 #include "pokeblock.h"
 #include "pokedex.h"
 #include "pokemon.h"
+#include "pokemon_icon.h"
 #include "pokemon_storage_system.h"
 #include "random.h"
 #include "rayquaza_scene.h"
@@ -58,6 +59,7 @@
 #include "constants/battle_tower.h"
 #include "constants/decorations.h"
 #include "constants/event_objects.h"
+#include "constants/characters.h"
 #include "constants/event_object_movement.h"
 #include "constants/field_effects.h"
 #include "constants/field_specials.h"
@@ -4297,7 +4299,11 @@ void GetCodeFeedback(void)
 // Pokemon Center Nurse Experience Service Functions
 static void Task_MoneyInputForExp(u8 taskId);
 static void PrintExpMoneyAmount(u8 windowId, u16 amount);
+static void PrintPokemonPreview(u8 windowId, u8 partySlot, u16 expAmount);
+static u8 CalculateLevelFromExperience(u16 species, u32 experience);
 
+// Processes the experience purchase transaction
+// Expects VAR_0x8005 to contain party slot (0-5) and VAR_0x8006 to contain money amount
 void GiveExpFromNurse(void)
 {
     // VAR_0x8005 contains the party slot (0-5)
@@ -4326,6 +4332,7 @@ void GiveExpFromNurse(void)
     gSpecialVar_Result = TRUE; // Transaction successful
 }
 
+// Creates interactive money input interface for experience purchase
 void MoneyInputForExp(void)
 {
     u32 playerMoney = GetMoney(&gSaveBlock1Ptr->money);
@@ -4344,19 +4351,24 @@ void MoneyInputForExp(void)
     gTasks[taskId].data[0] = 1;         // Current amount (start with $1)
     gTasks[taskId].data[1] = maxAmount; // Max amount
     gTasks[taskId].data[2] = 0;         // Window ID (will be set)
+    gTasks[taskId].data[3] = 0;         // Preview Window ID (will be set)
+    gTasks[taskId].data[4] = 0;         // Mon Icon ID (will be set)
 }
 
 #define tAmount data[0]
 #define tMaxAmount data[1]
 #define tWindowId data[2]
+#define tPreviewWindowId data[3]
+#define tMonIconId data[4]
 
 static void Task_MoneyInputForExp(u8 taskId)
 {
     s16 *data = gTasks[taskId].data;
 
-    // Create window if not created yet
+    // Create windows if not created yet
     if (tWindowId == 0)
     {
+        // Main money input window
         struct WindowTemplate template = {
             .bg = 0,
             .tilemapLeft = 1,
@@ -4370,14 +4382,41 @@ static void Task_MoneyInputForExp(u8 taskId)
         DrawStdWindowFrame(tWindowId, FALSE);
         PrintExpMoneyAmount(tWindowId, tAmount);
         CopyWindowToVram(tWindowId, COPYWIN_FULL);
+
+        // Pokemon preview window
+        struct WindowTemplate previewTemplate = {
+            .bg = 0,
+            .tilemapLeft = 15,
+            .tilemapTop = 1,
+            .width = 12,
+            .height = 8,
+            .paletteNum = 15,
+            .baseBlock = 50};
+
+        tPreviewWindowId = AddWindow(&previewTemplate);
+        DrawStdWindowFrame(tPreviewWindowId, FALSE);
+        PrintPokemonPreview(tPreviewWindowId, gSpecialVar_0x8005, tAmount);
+        CopyWindowToVram(tPreviewWindowId, COPYWIN_FULL);
+
+        // Create Pokemon icon sprite
+        struct Pokemon *mon = &gPlayerParty[gSpecialVar_0x8005];
+        u16 species = GetMonData(mon, MON_DATA_SPECIES_OR_EGG);
+        u32 personality = GetMonData(mon, MON_DATA_PERSONALITY);
+        LoadMonIconPalettePersonality(species, personality);
+        tMonIconId = CreateMonIcon(species, SpriteCB_MonIcon, 165, 30, 4, personality);
+        gSprites[tMonIconId].oam.priority = 0;
     }
 
     // Handle input
     if (AdjustQuantityAccordingToDPadInput(&tAmount, tMaxAmount) == TRUE)
     {
-        // Amount changed, update display
+        // Amount changed, update displays
         PrintExpMoneyAmount(tWindowId, tAmount);
         CopyWindowToVram(tWindowId, COPYWIN_GFX);
+
+        PrintPokemonPreview(tPreviewWindowId, gSpecialVar_0x8005, tAmount);
+        CopyWindowToVram(tPreviewWindowId, COPYWIN_FULL);
+
         PlaySE(SE_SELECT);
     }
     else if (JOY_NEW(A_BUTTON))
@@ -4389,6 +4428,9 @@ static void Task_MoneyInputForExp(u8 taskId)
         // Clean up
         ClearStdWindowAndFrame(tWindowId, FALSE);
         RemoveWindow(tWindowId);
+        ClearStdWindowAndFrame(tPreviewWindowId, FALSE);
+        RemoveWindow(tPreviewWindowId);
+        FreeAndDestroyMonIconSprite(&gSprites[tMonIconId]);
         DestroyTask(taskId);
         PlaySE(SE_SELECT);
         ScriptContext_Enable();
@@ -4402,6 +4444,9 @@ static void Task_MoneyInputForExp(u8 taskId)
         // Clean up
         ClearStdWindowAndFrame(tWindowId, FALSE);
         RemoveWindow(tWindowId);
+        ClearStdWindowAndFrame(tPreviewWindowId, FALSE);
+        RemoveWindow(tPreviewWindowId);
+        FreeAndDestroyMonIconSprite(&gSprites[tMonIconId]);
         DestroyTask(taskId);
         PlaySE(SE_SELECT);
         ScriptContext_Enable();
@@ -4420,4 +4465,67 @@ static void PrintExpMoneyAmount(u8 windowId, u16 amount)
 
     // Print money amount on second line using the standard money printing function
     PrintMoneyAmount(windowId, 24, 17, amount, TEXT_SKIP_DRAW);
+}
+
+static u8 CalculateLevelFromExperience(u16 species, u32 experience)
+{
+    s32 level = 1;
+
+    // Ensure species is valid
+    if (species == 0 || species > NUM_SPECIES)
+        species = SPECIES_BULBASAUR; // fallback to valid species
+
+    u8 growthRate = gSpeciesInfo[species].growthRate;
+
+    while (level <= MAX_LEVEL && gExperienceTables[growthRate][level] <= experience)
+        level++;
+
+    return level - 1;
+}
+
+static void PrintPokemonPreview(u8 windowId, u8 partySlot, u16 expAmount)
+{
+    static const u8 sText_CurrentLevel[] = _("Current: Lv");
+    static const u8 sText_NewLevel[] = _("New: Lv");
+
+    struct Pokemon *mon = &gPlayerParty[partySlot];
+    u16 species = GetMonData(mon, MON_DATA_SPECIES_OR_EGG);
+    u32 currentExp = GetMonData(mon, MON_DATA_EXP);
+    u32 newExp = currentExp + expAmount;
+
+    u8 currentLevel = GetLevelFromMonExp(mon);
+    u8 newLevel = CalculateLevelFromExperience(species, newExp);
+
+    // Clear window content area
+    FillWindowPixelBuffer(windowId, PIXEL_FILL(1));
+
+    // Get Pokemon nickname into a buffer
+    u8 monName[POKEMON_NAME_LENGTH + 1];
+    GetMonData(mon, MON_DATA_NICKNAME, monName);
+    StringGet_Nickname(monName);
+
+    // Print Pokemon name (centered)
+    u8 x = GetStringCenterAlignXOffset(FONT_NORMAL, monName, 90);
+    AddTextPrinterParameterized(windowId, FONT_NORMAL, monName, x, 1, TEXT_SKIP_DRAW, NULL);
+
+    // Print current level
+    AddTextPrinterParameterized(windowId, FONT_NORMAL, sText_CurrentLevel, 8, 35, TEXT_SKIP_DRAW, NULL);
+    ConvertIntToDecimalStringN(gStringVar1, currentLevel, STR_CONV_MODE_LEFT_ALIGN, 3);
+    AddTextPrinterParameterized(windowId, FONT_NORMAL, gStringVar1, 72, 35, TEXT_SKIP_DRAW, NULL);
+
+    // Print new level
+    AddTextPrinterParameterized(windowId, FONT_NORMAL, sText_NewLevel, 8, 50, TEXT_SKIP_DRAW, NULL);
+    ConvertIntToDecimalStringN(gStringVar2, newLevel, STR_CONV_MODE_LEFT_ALIGN, 3);
+
+    // Use green color if level increased, otherwise normal color
+    if (newLevel > currentLevel)
+    {
+        // Create color array for green text
+        static const u8 sGreenText[] = {TEXT_COLOR_TRANSPARENT, TEXT_COLOR_GREEN, TEXT_COLOR_LIGHT_GRAY};
+        AddTextPrinterParameterized4(windowId, FONT_NORMAL, 72, 50, 0, 0, sGreenText, TEXT_SKIP_DRAW, gStringVar2);
+    }
+    else
+    {
+        AddTextPrinterParameterized(windowId, FONT_NORMAL, gStringVar2, 72, 50, TEXT_SKIP_DRAW, NULL);
+    }
 }
