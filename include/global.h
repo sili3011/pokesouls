@@ -582,8 +582,8 @@ struct SaveBlock2
     u16 optionsBattleStyle : 1;        // OPTIONS_BATTLE_STYLE_[SHIFT/SET]
     u16 optionsBattleSceneOff : 1;     // whether battle animations are disabled
     u16 regionMapZoom : 1;             // whether the map is zoomed in
-    // u16 padding1:4;
-    // u16 padding2;
+                                       // u16 padding1:4;
+                                       // u16 padding2;
     /*0x18*/ struct Pokedex pokedex;
     /*0x90*/ u8 filler_90[0x8];
     /*0x98*/ struct Time localTimeOffset;
@@ -1081,7 +1081,8 @@ struct SaveBlock1
     /*0x988*/ u8 filler1[0x34]; // Previously Dex Flags, feel free to remove.
 #endif                          // FREE_EXTRA_SEEN_FLAGS_SAVEBLOCK1
     /*0x9BC*/ u16 berryBlenderRecords[3];
-    /*0x9C2*/ u8 unused_9C2[6];
+    /*0x9C2*/ u16 moneyLostToTrainer; // Trainer ID who took our money
+    /*0x9C4*/ u32 moneyLostAmount;    // Amount of money lost to that trainer
 #if FREE_MATCH_CALL == FALSE
     /*0x9C8*/ u16 trainerRematchStepCounter;
     // MAX_REMATCH_ENTRIES decreased from vanilla's 100 to 92
