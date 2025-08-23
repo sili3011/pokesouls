@@ -50,7 +50,6 @@ EventScript_PkmnCenterNurse_ProcessExpPurchase::
 	@ Show success message
 	bufferpartymonnick 0, VAR_0x8005
 	buffernumberstring 1, VAR_0x8006
-	msgbox gText_ExpGained, MSGBOX_DEFAULT
 	msgbox gText_LevelUpAnotherPokemon, MSGBOX_YESNO
 	goto_if_eq VAR_RESULT, YES, EventScript_PkmnCenterNurse_LevelUpLoop
 	goto EventScript_PkmnCenterNurse_LevelUpCancel

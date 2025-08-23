@@ -12,13 +12,15 @@
 
 #define RAM_SCRIPT_MAGIC 51
 
-enum {
+enum
+{
     SCRIPT_MODE_STOPPED,
     SCRIPT_MODE_BYTECODE,
     SCRIPT_MODE_NATIVE,
 };
 
-enum {
+enum
+{
     CONTEXT_RUNNING,
     CONTEXT_WAITING,
     CONTEXT_SHUTDOWN,
@@ -273,6 +275,11 @@ void ScriptContext_ContinueScript(struct ScriptContext *ctx)
     sGlobalScriptContextStatus = CONTEXT_RUNNING;
 }
 
+struct ScriptContext *ScriptContext_GetGlobal(void)
+{
+    return &sGlobalScriptContext;
+}
+
 // Puts the script into waiting mode; usually called from a wait* script command.
 void ScriptContext_Stop(void)
 {
@@ -293,7 +300,8 @@ void RunScriptImmediately(const u8 *ptr)
 {
     InitScriptContext(&sImmediateScriptContext, gScriptCmdTable, gScriptCmdTableEnd);
     SetupBytecodeScript(&sImmediateScriptContext, ptr);
-    while (RunScriptCommand(&sImmediateScriptContext) == TRUE);
+    while (RunScriptCommand(&sImmediateScriptContext) == TRUE)
+        ;
 }
 
 const u8 *MapHeaderGetScriptTable(u8 tag)
@@ -406,14 +414,14 @@ u32 CalculateRamScriptChecksum(void)
     return CalcCRC16WithTable((u8 *)(&gSaveBlock1Ptr->ramScript.data), sizeof(gSaveBlock1Ptr->ramScript.data));
 #else
     return 0;
-#endif //FREE_MYSTERY_EVENT_BUFFERS
+#endif // FREE_MYSTERY_EVENT_BUFFERS
 }
 
 void ClearRamScript(void)
 {
 #if FREE_MYSTERY_EVENT_BUFFERS == FALSE
     CpuFill32(0, &gSaveBlock1Ptr->ramScript, sizeof(struct RamScript));
-#endif //FREE_MYSTERY_EVENT_BUFFERS
+#endif // FREE_MYSTERY_EVENT_BUFFERS
 }
 
 bool8 InitRamScript(const u8 *script, u16 scriptSize, u8 mapGroup, u8 mapNum, u8 localId)
@@ -435,7 +443,7 @@ bool8 InitRamScript(const u8 *script, u16 scriptSize, u8 mapGroup, u8 mapNum, u8
     return TRUE;
 #else
     return FALSE;
-#endif //FREE_MYSTERY_EVENT_BUFFERS
+#endif // FREE_MYSTERY_EVENT_BUFFERS
 }
 
 const u8 *GetRamScript(u8 localId, const u8 *script)
@@ -463,7 +471,7 @@ const u8 *GetRamScript(u8 localId, const u8 *script)
     }
 #else
     return script;
-#endif //FREE_MYSTERY_EVENT_BUFFERS
+#endif // FREE_MYSTERY_EVENT_BUFFERS
 }
 
 #define NO_OBJECT LOCALID_PLAYER
@@ -485,7 +493,7 @@ bool32 ValidateSavedRamScript(void)
     return TRUE;
 #else
     return FALSE;
-#endif //FREE_MYSTERY_EVENT_BUFFERS
+#endif // FREE_MYSTERY_EVENT_BUFFERS
 }
 
 u8 *GetSavedRamScriptIfValid(void)
@@ -513,7 +521,7 @@ u8 *GetSavedRamScriptIfValid(void)
     }
 #else
     return NULL;
-#endif //FREE_MYSTERY_EVENT_BUFFERS
+#endif // FREE_MYSTERY_EVENT_BUFFERS
 }
 
 void InitRamScript_NoObjectEvent(u8 *script, u16 scriptSize)
@@ -522,7 +530,7 @@ void InitRamScript_NoObjectEvent(u8 *script, u16 scriptSize)
     if (scriptSize > sizeof(gSaveBlock1Ptr->ramScript.data.script))
         scriptSize = sizeof(gSaveBlock1Ptr->ramScript.data.script);
     InitRamScript(script, scriptSize, MAP_GROUP(MAP_UNDEFINED), MAP_NUM(MAP_UNDEFINED), NO_OBJECT);
-#endif //FREE_MYSTERY_EVENT_BUFFERS
+#endif // FREE_MYSTERY_EVENT_BUFFERS
 }
 
 bool8 LoadTrainerObjectScript(void)
@@ -531,7 +539,8 @@ bool8 LoadTrainerObjectScript(void)
     return TRUE;
 }
 
-struct ScriptEffectContext {
+struct ScriptEffectContext
+{
     u32 breakOn;
     intptr_t breakTo[5];
     const u8 *nextCmd;

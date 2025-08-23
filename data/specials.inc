@@ -465,7 +465,6 @@ gSpecials::
 	def_special ClearLinkContestFlags
 	def_special TryContestEModeLinkup
 	def_special ShowScrollableMultichoice
-	def_special ScrollableMultichoice_TryReturnToList
 	def_special BufferBattleTowerElevatorFloors
 	def_special TryStoreHeldItemsInPyramidBag
 	def_special ChooseItemsToTossFromPyramidBag

@@ -41,6 +41,7 @@ bool8 ScriptContext_IsEnabled(void);
 bool8 ScriptContext_RunScript(void);
 void ScriptContext_SetupScript(const u8 *ptr);
 void ScriptContext_ContinueScript(struct ScriptContext *ctx);
+struct ScriptContext *ScriptContext_GetGlobal(void);
 void ScriptContext_Stop(void);
 void ScriptContext_Enable(void);
 void RunScriptImmediately(const u8 *ptr);
@@ -125,29 +126,29 @@ static inline bool32 Script_IsAnalyzingEffects(void)
     return gScriptEffectContext != NULL;
 }
 
-#define RunScriptImmediatelyUntilEffect(effects, ptr, ctx) \
-    ({ \
+#define RunScriptImmediatelyUntilEffect(effects, ptr, ctx)                                                     \
+    ({                                                                                                         \
         _Static_assert((effects) & 0x80000000, "RunScriptImmediatelyUntilEffect requires an effects version"); \
-        RunScriptImmediatelyUntilEffect_Internal(effects, ptr, ctx); \
+        RunScriptImmediatelyUntilEffect_Internal(effects, ptr, ctx);                                           \
     })
 
 /* Optimize 'Script_RequestEffects' to a no-op if it would have no
  * effect. 'Script_RequestEffects' must be called in all commands and
  * natives/specials with 'requests_effects=TRUE' even if it would have
  * no effect to future-proof against new effects. */
-#define Script_RequestEffects(effects) \
-    ({ \
+#define Script_RequestEffects(effects)                                                               \
+    ({                                                                                               \
         _Static_assert((effects) & 0x80000000, "Script_RequestEffects requires an effects version"); \
-        if ((effects) != SCREFF_V1) \
-            if (Script_IsAnalyzingEffects()) \
-                Script_RequestEffects_Internal((effects) & SCREFF_ANY); \
+        if ((effects) != SCREFF_V1)                                                                  \
+            if (Script_IsAnalyzingEffects())                                                         \
+                Script_RequestEffects_Internal((effects) & SCREFF_ANY);                              \
     })
 
 /* Optimize 'Script_RequestWriteVar' to a no-op if it would have no
  * effect. */
-#define Script_RequestWriteVar(varId) \
-    ({ \
-        if (Script_IsAnalyzingEffects()) \
+#define Script_RequestWriteVar(varId)               \
+    ({                                              \
+        if (Script_IsAnalyzingEffects())            \
             Script_RequestWriteVar_Internal(varId); \
     })
 
