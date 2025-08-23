@@ -21,9 +21,6 @@ gText_NotEnoughMoney::
 	.string "I'm sorry, but you don't have\n"
 	.string "enough for that.$"
 
-gText_ExpGained::
-	.string "{STR_VAR_1} grew stronger!$"
-
 gText_IllTakeYourPkmn::
 	.string "Okay, I'll take your POKéMON\n"
 	.string "for a few seconds.$"

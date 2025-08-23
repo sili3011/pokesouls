@@ -30,12 +30,16 @@
 #include "match_call.h"
 #include "menu.h"
 #include "menu_helpers.h"
+#include "menu_specialized.h"
 #include "overworld.h"
 #include "party_menu.h"
+#include "pokemon_summary_screen.h"
 #include "pokeblock.h"
 #include "pokedex.h"
 #include "pokemon.h"
 #include "pokemon_icon.h"
+#include "evolution_scene.h"
+#include "caps.h"
 #include "pokemon_storage_system.h"
 #include "random.h"
 #include "rayquaza_scene.h"
@@ -55,6 +59,7 @@
 #include "window.h"
 #include "bg.h"
 #include "gpu_regs.h"
+#include "constants/characters.h"
 #include "constants/battle_frontier.h"
 #include "constants/battle_pyramid.h"
 #include "constants/battle_tower.h"
@@ -78,7 +83,9 @@
 #include "constants/rgb.h"
 #include "palette.h"
 #include "battle_util.h"
+#include "constants/pokemon.h"
 #include "naming_screen.h"
+#include "evolution_scene.h"
 
 #define TAG_ITEM_ICON 5500
 
@@ -2688,16 +2695,6 @@ static void Task_ScrollableMultichoice_WaitReturnToList(u8 taskId)
     }
 }
 
-// Never called
-void ScrollableMultichoice_TryReturnToList(void)
-{
-    u8 taskId = FindTaskIdByFunc(Task_ScrollableMultichoice_WaitReturnToList);
-    if (taskId == TASK_NONE)
-        ScriptContext_Enable();
-    else
-        gTasks[taskId].tKeepOpenAfterSelect++; // Return to list
-}
-
 static void Task_ScrollableMultichoice_ReturnToList(u8 taskId)
 {
     LockPlayerFieldControls();
@@ -4299,47 +4296,274 @@ void GetCodeFeedback(void)
 
 // Pokemon Center Nurse Experience Service Functions
 static void Task_MoneyInputForExp(u8 taskId);
-static void PrintExpMoneyAmount(u8 windowId, u16 amount);
-static void PrintPokemonPreview(u8 windowId, u8 partySlot, u16 expAmount);
+static void PrintExpMoneyAmount(u8 windowId, u32 amount);
+static void PrintPokemonPreview(u8 windowId, u8 partySlot, u32 expAmount);
 static u8 CalculateLevelFromExperience(u16 species, u32 experience);
+static bool8 AdjustExpAccordingToDPadInput(u32 *expAmount, u32 max, u8 partySlot);
+
+// Level-up flow after granting EXP at the Nurse
+static void Task_NurseExpLevelUp(u8 taskId);
+// Nurse level-up flow declarations
+static void ContinueNurseLevelUpProcess(void);
+static void Task_WaitForMessageThenOpenSummary(u8 taskId);
+static void Task_WaitForMessageThenContinue(u8 taskId);
+static void Task_WaitForFadeAndContinueNurse(u8 taskId);
+static void CB2_ShowForgotMoveMessage(void);
+static void CB2_ReturnFromNurseSelectMove(void);
+static void CB2_ReturnFromNurseEvolution(void);
+static void FieldCB_ContinueNurseLevelUp(void);
+static void FieldCB_ShowForgotAndContinue(void);
+static void Task_WaitForFadeThenShowForgotMessage(u8 taskId);
+// Level-up stats summary helpers
+static void Task_NurseStartLevelUpStats(u8 taskId);
+static void Task_NurseLevelUpStatsPg1Wait(u8 taskId);
+static void Task_NurseLevelUpStatsPg2Wait(u8 taskId);
+static void Task_WaitForVramThenContinueScript(u8 taskId);
+static u8 Nurse_CreateLevelUpStatsWindow(void);
+static void Nurse_RemoveLevelUpStatsWindow(u8 windowId);
+static void Nurse_BufferMonStats(struct Pokemon *mon, u16 *buf);
+static u16 TryLearnPostEvolutionMove(struct Pokemon *mon, u8 startLevel, u8 currentLevel, bool8 firstMove);
+
+// State variables for nurse level-up process
+static EWRAM_DATA u8 sNursePartyId = 0;
+static EWRAM_DATA u16 sNurseMoveToLearn = MOVE_NONE;
+static EWRAM_DATA u8 sNurseCurrentLevel = 0;
+static EWRAM_DATA u8 sNurseTargetLevel = 0;
+static EWRAM_DATA bool8 sNurseFirstMoveFlag = FALSE;
+static EWRAM_DATA u16 sNurseForgottenMove = MOVE_NONE;
+static EWRAM_DATA u32 sNurseExpAmount = 0;
+static EWRAM_DATA bool8 sNurseEvolutionProcessed = FALSE;
+static EWRAM_DATA u8 sNurseEvolutionLevel = 0;
+static EWRAM_DATA bool8 sNursePostEvolutionMode = FALSE;
+// Stat summary buffers and window
+static EWRAM_DATA u16 sNurseStatsBefore[NUM_STATS] = {0};
+static EWRAM_DATA u16 sNurseStatsAfter[NUM_STATS] = {0};
+static EWRAM_DATA u16 sNurseLevelUpWindowId = 0;
+
+// Script context storage for proper resumption
+static EWRAM_DATA struct ScriptContext sNurseSavedScriptContext;
+
+// Evolution history tracking for multi-stage evolutions
+struct NurseEvolutionStage
+{
+    u16 species;
+    u8 startLevel;
+    u8 endLevel;
+};
+
+#define MAX_EVOLUTION_STAGES 10
+static EWRAM_DATA struct NurseEvolutionStage sNurseEvolutionHistory[MAX_EVOLUTION_STAGES];
+static EWRAM_DATA u8 sNurseEvolutionStageCount = 0;
+static EWRAM_DATA u8 sNurseCurrentEvolutionStage = 0;
+
+// Enhanced input handler for EXP amounts with level targeting
+static bool8 AdjustExpAccordingToDPadInput(u32 *expAmount, u32 max, u8 partySlot)
+{
+    u32 valBefore = *expAmount;
+    struct Pokemon *mon = &gPlayerParty[partySlot];
+    u16 species = GetMonData(mon, MON_DATA_SPECIES);
+    u8 currentLevel = GetMonData(mon, MON_DATA_LEVEL);
+    u32 currentExp = GetMonData(mon, MON_DATA_EXP);
+
+    if (JOY_REPEAT(DPAD_ANY) == DPAD_UP)
+    {
+        (*expAmount)++;
+        if (*expAmount > max)
+            *expAmount = 1;
+    }
+    else if (JOY_REPEAT(DPAD_ANY) == DPAD_DOWN)
+    {
+        (*expAmount)--;
+        if (*expAmount <= 0)
+            *expAmount = max;
+    }
+    else if (JOY_REPEAT(DPAD_ANY) == DPAD_RIGHT)
+    {
+        // Calculate what level we would reach with current amount + current exp
+        // Protect against overflow
+        u32 totalExpWithAmount;
+        if (*expAmount > UINT32_MAX - currentExp)
+            totalExpWithAmount = UINT32_MAX; // Clamp to max
+        else
+            totalExpWithAmount = currentExp + *expAmount;
+        u8 levelWithCurrentAmount = currentLevel;
+
+        // Find what level we'd be at with current amount
+        for (u8 level = currentLevel; level <= MAX_LEVEL; level++)
+        {
+            if (totalExpWithAmount >= gExperienceTables[gSpeciesInfo[species].growthRate][level])
+                levelWithCurrentAmount = level;
+            else
+                break;
+        }
+
+        // Set amount to reach the next level after that
+        u8 targetLevel = levelWithCurrentAmount + 1;
+        if (targetLevel > MAX_LEVEL || targetLevel < levelWithCurrentAmount) // Handle u8 overflow
+            targetLevel = MAX_LEVEL;
+
+        u32 targetLevelExp = gExperienceTables[gSpeciesInfo[species].growthRate][targetLevel];
+        if (targetLevelExp > currentExp)
+        {
+            u32 expNeeded = targetLevelExp - currentExp;
+            if (expNeeded <= max)
+                *expAmount = expNeeded;
+            else
+                *expAmount = max;
+        }
+        else
+        {
+            // Already at or past target level, just set to max
+            *expAmount = max;
+        }
+    }
+    else if (JOY_REPEAT(DPAD_ANY) == DPAD_LEFT)
+    {
+        // Calculate what level we would reach with current amount + current exp
+        // Protect against overflow
+        u32 totalExpWithAmount;
+        if (*expAmount > UINT32_MAX - currentExp)
+            totalExpWithAmount = UINT32_MAX; // Clamp to max
+        else
+            totalExpWithAmount = currentExp + *expAmount;
+        u8 levelWithCurrentAmount = currentLevel;
+
+        // Find what level we'd be at with current amount
+        for (u8 level = currentLevel; level <= MAX_LEVEL; level++)
+        {
+            if (totalExpWithAmount >= gExperienceTables[gSpeciesInfo[species].growthRate][level])
+                levelWithCurrentAmount = level;
+            else
+                break;
+        }
+
+        // Set amount to reach the previous level (decrease from current amount)
+        u8 targetLevel = levelWithCurrentAmount - 1;
+        if (targetLevel < currentLevel)
+        {
+            // Can't go below current level, just decrease amount
+            if (*expAmount > 1)
+                *expAmount = *expAmount - 1;
+            else
+                *expAmount = 1;
+        }
+        else
+        {
+            u32 targetLevelExp = gExperienceTables[gSpeciesInfo[species].growthRate][targetLevel];
+            if (targetLevelExp > currentExp)
+            {
+                u32 expNeeded = targetLevelExp - currentExp;
+                if (expNeeded > 0 && expNeeded <= max)
+                    *expAmount = expNeeded;
+                else
+                    *expAmount = 1; // Minimum amount
+            }
+            else
+            {
+                // Target level requires less exp than current, just set to minimum
+                *expAmount = 1;
+            }
+        }
+    }
+    else
+    {
+        return FALSE;
+    }
+
+    if (*expAmount == valBefore)
+    {
+        return FALSE;
+    }
+    else
+    {
+        PlaySE(SE_SELECT);
+        return TRUE;
+    }
+}
 
 // Processes the experience purchase transaction
-// Expects VAR_0x8005 to contain party slot (0-5) and VAR_0x8006 to contain money amount
+// Expects VAR_0x8005 to contain party slot (0-5) and sNurseExpAmount to contain money amount (also EXP granted)
 void GiveExpFromNurse(void)
 {
-    // VAR_0x8005 contains the party slot (0-5)
-    // VAR_0x8006 contains the money amount (which equals experience amount)
 
-    u32 cost = gSpecialVar_0x8006;
+    u32 cost = sNurseExpAmount;
     u32 playerMoney = GetMoney(&gSaveBlock1Ptr->money);
 
     // Check if player has enough money
     if (playerMoney < cost)
     {
-        gSpecialVar_Result = FALSE; // Not enough money
+        gSpecialVar_Result = FALSE;
         return;
     }
 
     // Remove the money
     RemoveMoney(&gSaveBlock1Ptr->money, cost);
 
-    // Give experience equal to the money spent
-    struct Pokemon *mon = &gPlayerParty[gSpecialVar_0x8005];
+    // Prepare EXP grant and clamp to current level cap
+    u8 partyId = gSpecialVar_0x8005;
+    struct Pokemon *mon = &gPlayerParty[partyId];
+    u16 species = GetMonData(mon, MON_DATA_SPECIES, NULL);
+    u32 growthRate = gSpeciesInfo[species].growthRate;
     u32 currentExp = GetMonData(mon, MON_DATA_EXP, NULL);
-    u32 newExp = currentExp + gSpecialVar_0x8006;
-    SetMonData(mon, MON_DATA_EXP, &newExp);
-    CalculateMonStats(mon);
+    u32 expToAdd = sNurseExpAmount;
+    u8 capLevel = GetCurrentLevelCap();
+    u32 capExp = gExperienceTables[growthRate][capLevel];
 
-    gSpecialVar_Result = TRUE; // Transaction successful
+    // Protect against overflow when adding experience
+    u32 newExp;
+    if (expToAdd > UINT32_MAX - currentExp)
+        newExp = UINT32_MAX; // Clamp to max to prevent overflow
+    else
+        newExp = currentExp + expToAdd;
+
+    if (newExp > capExp)
+        newExp = capExp;
+
+    // Set EXP immediately; levels/moves/evo are handled asynchronously
+    SetMonData(mon, MON_DATA_EXP, &newExp);
+
+    u8 currLevel = GetMonData(mon, MON_DATA_LEVEL, NULL);
+    u8 targetLevel = CalculateLevelFromExperience(species, newExp);
+    if (targetLevel > capLevel)
+        targetLevel = capLevel;
+
+    // Update the Pokémon's level to match the new experience
+    if (targetLevel > currLevel)
+    {
+        // Buffer stats BEFORE applying level changes for later summary
+        Nurse_BufferMonStats(mon, sNurseStatsBefore);
+
+        SetMonData(mon, MON_DATA_LEVEL, &targetLevel);
+        CalculateMonStats(mon);
+    }
+
+    if (targetLevel <= currLevel)
+    {
+        // Nothing to do beyond EXP change
+        gSpecialVar_Result = TRUE;
+        return;
+    }
+
+    // Start async level-up flow
+    sNurseSavedScriptContext = *ScriptContext_GetGlobal(); // Save current script context
+    ScriptContext_Stop();                                  // Stop script to prevent nurse dialog interference during level-up process
+    u8 taskId = CreateTask(Task_NurseExpLevelUp, 0);
+    gTasks[taskId].data[0] = 0;             // tState
+    gTasks[taskId].data[1] = partyId;       // tPartyId
+    gTasks[taskId].data[2] = currLevel + 1; // tCurrentLevel (start from next level)
+    gTasks[taskId].data[3] = targetLevel;   // tTargetLevel
+    gTasks[taskId].data[4] = TRUE;          // tFirstMoveFlag
+
+    // Set success result for when script resumes
+    gSpecialVar_Result = TRUE;
 }
 
-// Creates interactive money input interface for experience purchase
 void MoneyInputForExp(void)
 {
     u32 playerMoney = GetMoney(&gSaveBlock1Ptr->money);
 
-    // Start with minimum amount of $1, max is player's money or 9999
-    u16 maxAmount = (playerMoney > 9999) ? 9999 : (u16)playerMoney;
+    // Start with minimum amount of $1, max is player's money or 1640000 (max exp needed from level 1 to 100)
+    u32 maxAmount = (playerMoney > 1640000) ? 1640000 : playerMoney;
 
     if (maxAmount == 0)
     {
@@ -4349,22 +4573,30 @@ void MoneyInputForExp(void)
 
     // Create task to handle money input
     u8 taskId = CreateTask(Task_MoneyInputForExp, 0);
-    gTasks[taskId].data[0] = 1;         // Current amount (start with $1)
-    gTasks[taskId].data[1] = maxAmount; // Max amount
-    gTasks[taskId].data[2] = 0;         // Window ID (will be set)
-    gTasks[taskId].data[3] = 0;         // Preview Window ID (will be set)
-    gTasks[taskId].data[4] = 0;         // Mon Icon ID (will be set)
+    gTasks[taskId].data[0] = 1;                  // Current amount low (start with $1)
+    gTasks[taskId].data[1] = 0;                  // Current amount high
+    gTasks[taskId].data[2] = maxAmount & 0xFFFF; // Max amount low
+    gTasks[taskId].data[3] = maxAmount >> 16;    // Max amount high
+    gTasks[taskId].data[4] = 0;                  // Window ID (will be set)
+    gTasks[taskId].data[5] = 0;                  // Preview Window ID (will be set)
+    gTasks[taskId].data[6] = 0;                  // Mon Icon ID (will be set)
 }
 
-#define tAmount data[0]
-#define tMaxAmount data[1]
-#define tWindowId data[2]
-#define tPreviewWindowId data[3]
-#define tMonIconId data[4]
+#define tAmountLow data[0]
+#define tAmountHigh data[1]
+#define tMaxAmountLow data[2]
+#define tMaxAmountHigh data[3]
+#define tWindowId data[4]
+#define tPreviewWindowId data[5]
+#define tMonIconId data[6]
 
 static void Task_MoneyInputForExp(u8 taskId)
 {
     s16 *data = gTasks[taskId].data;
+
+    // Helper functions to work with 32-bit amounts in 16-bit slots
+    u32 currentAmount = ((u32)(u16)tAmountHigh << 16) | (u32)(u16)tAmountLow;
+    u32 maxAmount = ((u32)(u16)tMaxAmountHigh << 16) | (u32)(u16)tMaxAmountLow;
 
     // Create windows if not created yet
     if (tWindowId == 0)
@@ -4381,7 +4613,7 @@ static void Task_MoneyInputForExp(u8 taskId)
 
         tWindowId = AddWindow(&template);
         DrawStdWindowFrame(tWindowId, FALSE);
-        PrintExpMoneyAmount(tWindowId, tAmount);
+        PrintExpMoneyAmount(tWindowId, currentAmount);
         CopyWindowToVram(tWindowId, COPYWIN_FULL);
 
         // Pokemon preview window
@@ -4396,7 +4628,7 @@ static void Task_MoneyInputForExp(u8 taskId)
 
         tPreviewWindowId = AddWindow(&previewTemplate);
         DrawStdWindowFrame(tPreviewWindowId, FALSE);
-        PrintPokemonPreview(tPreviewWindowId, gSpecialVar_0x8005, tAmount);
+        PrintPokemonPreview(tPreviewWindowId, gSpecialVar_0x8005, currentAmount);
         CopyWindowToVram(tPreviewWindowId, COPYWIN_FULL);
 
         // Create Pokemon icon sprite
@@ -4408,22 +4640,25 @@ static void Task_MoneyInputForExp(u8 taskId)
         gSprites[tMonIconId].oam.priority = 0;
     }
 
-    // Handle input
-    if (AdjustQuantityAccordingToDPadInput(&tAmount, tMaxAmount) == TRUE)
+    // Handle input with smart level targeting
+    if (AdjustExpAccordingToDPadInput(&currentAmount, maxAmount, gSpecialVar_0x8005))
     {
+        // Update the task data with new amount
+        tAmountLow = currentAmount & 0xFFFF;
+        tAmountHigh = currentAmount >> 16;
+
         // Amount changed, update displays
-        PrintExpMoneyAmount(tWindowId, tAmount);
+        PrintExpMoneyAmount(tWindowId, currentAmount);
         CopyWindowToVram(tWindowId, COPYWIN_GFX);
 
-        PrintPokemonPreview(tPreviewWindowId, gSpecialVar_0x8005, tAmount);
+        PrintPokemonPreview(tPreviewWindowId, gSpecialVar_0x8005, currentAmount);
         CopyWindowToVram(tPreviewWindowId, COPYWIN_FULL);
-
-        PlaySE(SE_SELECT);
     }
     else if (JOY_NEW(A_BUTTON))
     {
-        // Confirm selection
-        gSpecialVar_0x8006 = tAmount;
+        // Confirm selection - store the 32-bit amount in our static variable
+        sNurseExpAmount = currentAmount;
+        gSpecialVar_0x8006 = 1; // Set to 1 to indicate success (can't store actual amount due to u16 limit)
         gSpecialVar_Result = TRUE;
 
         // Clean up
@@ -4439,6 +4674,7 @@ static void Task_MoneyInputForExp(u8 taskId)
     else if (JOY_NEW(B_BUTTON))
     {
         // Cancel
+        sNurseExpAmount = 0;
         gSpecialVar_0x8006 = 0;
         gSpecialVar_Result = FALSE;
 
@@ -4454,7 +4690,7 @@ static void Task_MoneyInputForExp(u8 taskId)
     }
 }
 
-static void PrintExpMoneyAmount(u8 windowId, u16 amount)
+static void PrintExpMoneyAmount(u8 windowId, u32 amount)
 {
     static const u8 sText_MoneyToSpend[] = _("Give experience to POKéMON:");
 
@@ -4484,7 +4720,7 @@ static u8 CalculateLevelFromExperience(u16 species, u32 experience)
     return level - 1;
 }
 
-static void PrintPokemonPreview(u8 windowId, u8 partySlot, u16 expAmount)
+static void PrintPokemonPreview(u8 windowId, u8 partySlot, u32 expAmount)
 {
     static const u8 sText_CurrentLevel[] = _("Current: Lv");
     static const u8 sText_NewLevel[] = _("New: Lv");
@@ -4492,9 +4728,15 @@ static void PrintPokemonPreview(u8 windowId, u8 partySlot, u16 expAmount)
     struct Pokemon *mon = &gPlayerParty[partySlot];
     u16 species = GetMonData(mon, MON_DATA_SPECIES_OR_EGG);
     u32 currentExp = GetMonData(mon, MON_DATA_EXP);
-    u32 newExp = currentExp + expAmount;
 
-    u8 currentLevel = GetLevelFromMonExp(mon);
+    // Protect against overflow when adding experience for preview
+    u32 newExp;
+    if (expAmount > UINT32_MAX - currentExp)
+        newExp = UINT32_MAX; // Clamp to max to prevent overflow
+    else
+        newExp = currentExp + expAmount;
+
+    u8 currentLevel = GetMonData(mon, MON_DATA_LEVEL, NULL);
     u8 newLevel = CalculateLevelFromExperience(species, newExp);
 
     // Clear window content area
@@ -4539,3 +4781,514 @@ void RefillPotionFlask(void)
         VarSet(VAR_POTION_FLASK_USES, 3);
     }
 }
+
+// Nurse level-up flow implementation
+
+#define tState data[0]
+#define tPartyId data[1]
+#define tCurrentLevel data[2]
+#define tTargetLevel data[3]
+#define tFirstMoveFlag data[4]
+
+static void Task_NurseExpLevelUp(u8 taskId)
+{
+    s16 *data = gTasks[taskId].data;
+
+    // Initialize state and start the level-up process
+    sNursePartyId = tPartyId;
+    sNurseCurrentLevel = tCurrentLevel;
+    sNurseTargetLevel = tTargetLevel;
+    sNurseFirstMoveFlag = TRUE;
+    sNurseEvolutionProcessed = FALSE; // Initialize evolution flag
+    sNursePostEvolutionMode = FALSE;  // Initialize post-evolution mode
+
+    // Initialize evolution history tracking
+    sNurseEvolutionStageCount = 0;
+    sNurseCurrentEvolutionStage = 0;
+
+    // Initialize window ID
+    sNurseLevelUpWindowId = WINDOW_NONE;
+
+    // Record the initial species as the first stage
+    struct Pokemon *mon = &gPlayerParty[sNursePartyId];
+    sNurseEvolutionHistory[0].species = GetMonData(mon, MON_DATA_SPECIES, NULL);
+    sNurseEvolutionHistory[0].startLevel = sNurseCurrentLevel;
+    sNurseEvolutionHistory[0].endLevel = sNurseTargetLevel; // Will be updated if evolution occurs
+    sNurseEvolutionStageCount = 1;
+
+    DestroyTask(taskId);
+    ContinueNurseLevelUpProcess();
+}
+
+static void Task_WaitForMessageThenOpenSummary(u8 taskId)
+{
+    if (GetFieldMessageBoxMode() == FIELD_MESSAGE_BOX_HIDDEN)
+    {
+        if (!gPaletteFade.active)
+        {
+            FreeAllWindowBuffers();
+            ShowSelectMovePokemonSummaryScreen(gPlayerParty, sNursePartyId, gPlayerPartyCount - 1, CB2_ReturnFromNurseSelectMove, sNurseMoveToLearn);
+            DestroyTask(taskId);
+        }
+    }
+}
+
+// Generic wait: when the field message box is closed, continue the nurse flow
+static void Task_WaitForMessageThenContinue(u8 taskId)
+{
+    if (GetFieldMessageBoxMode() == FIELD_MESSAGE_BOX_HIDDEN && !gPaletteFade.active)
+    {
+        DestroyTask(taskId);
+        ContinueNurseLevelUpProcess();
+    }
+}
+
+static void CB2_ShowForgotMoveMessage(void)
+{
+    // Clear any remaining UI state from summary screen
+    ResetSpriteData();
+    FreeAllSpritePalettes();
+    ClearScheduledBgCopiesToVram();
+
+    // Return to field and then show the "forgot and learned" message before continuing
+    gFieldCallback = FieldCB_ShowForgotAndContinue;
+    CB2_ReturnToField();
+}
+
+static void Task_WaitForFadeAndContinueNurse(u8 taskId)
+{
+    if (!gPaletteFade.active)
+    {
+        DestroyTask(taskId);
+        ContinueNurseLevelUpProcess();
+    }
+}
+
+static void FieldCB_ContinueNurseLevelUp(void)
+{
+    LockPlayerFieldControls();
+    Overworld_PlaySpecialMapMusic();
+    FadeInFromBlack();
+    // Create a task that waits for fade and then continues our nurse level-up process
+    CreateTask(Task_WaitForFadeAndContinueNurse, 10);
+}
+
+// Field callback used after forgetting a move: show message, wait, then continue
+static void FieldCB_ShowForgotAndContinue(void)
+{
+    LockPlayerFieldControls();
+    Overworld_PlaySpecialMapMusic();
+    FadeInFromBlack();
+    CreateTask(Task_WaitForFadeThenShowForgotMessage, 10);
+}
+
+static void Task_WaitForFadeThenShowForgotMessage(u8 taskId)
+{
+    if (!gPaletteFade.active)
+    {
+        // Prepare and show "forgot X and learned Y" message
+        struct Pokemon *mon = &gPlayerParty[sNursePartyId];
+        GetMonNickname(mon, gStringVar1);
+        StringCopy(gStringVar2, GetMoveName(sNurseMoveToLearn));
+        if (sNurseForgottenMove != MOVE_NONE)
+            StringCopy(gStringVar3, GetMoveName(sNurseForgottenMove));
+        else
+            StringCopy(gStringVar3, gText_ThreeDashes); // Fallback, should not happen
+
+        StringExpandPlaceholders(gStringVar4, gText_MoveRelearnerPkmnForgotMoveAndLearnedNew);
+        ShowFieldMessage(gStringVar4);
+
+        // Clear forgotten move buffer now that message is queued
+        sNurseForgottenMove = MOVE_NONE;
+
+        // Wait for message to close, then continue the nurse process
+        DestroyTask(taskId);
+        CreateTask(Task_WaitForMessageThenContinue, 0);
+    }
+}
+
+static void Task_ShowLevelUpAnotherDialog(u8 taskId)
+{
+    ScriptContext_ContinueScript(&sNurseSavedScriptContext);
+    DestroyTask(taskId);
+}
+
+// Wait for VRAM update to complete before continuing script
+static void Task_WaitForVramThenContinueScript(u8 taskId)
+{
+    s16 *data = gTasks[taskId].data;
+
+    // Wait for window to actually be cleared and VRAM updated
+    data[0]++; // frame counter
+
+    // Check if window is properly cleared and enough frames have passed for visual update
+    if (sNurseLevelUpWindowId == WINDOW_NONE && data[0] >= 2)
+    {
+        CreateTask(Task_ShowLevelUpAnotherDialog, 0);
+        DestroyTask(taskId);
+    }
+    // Safety timeout - continue after 10 frames even if window ID isn't cleared
+    else if (data[0] >= 10)
+    {
+        CreateTask(Task_ShowLevelUpAnotherDialog, 0);
+        DestroyTask(taskId);
+    }
+}
+
+// Helper function to check for moves the evolved Pokemon should learn from evolution level to current level
+static u16 TryLearnPostEvolutionMove(struct Pokemon *mon, u8 startLevel, u8 currentLevel, bool8 firstMove)
+{
+    static u8 sCurrentStage = 0;
+    static u16 sPostEvoLearningMoveIndex = 0;
+
+    if (firstMove)
+    {
+        // Initialize: start checking from the first evolution stage
+        sCurrentStage = 0;
+        sPostEvoLearningMoveIndex = 0;
+    }
+
+    // Check moves for each evolution stage that the Pokemon went through
+    while (sCurrentStage < sNurseEvolutionStageCount)
+    {
+        u16 stageSpecies = sNurseEvolutionHistory[sCurrentStage].species;
+        u8 stageStartLevel = sNurseEvolutionHistory[sCurrentStage].startLevel;
+        u8 stageEndLevel = sNurseEvolutionHistory[sCurrentStage].endLevel;
+
+        // Determine the level range for this stage within our target range
+        u8 checkStartLevel = stageStartLevel > startLevel ? stageStartLevel : startLevel;
+        u8 checkEndLevel = stageEndLevel < currentLevel ? stageEndLevel : currentLevel;
+
+        // Only check this stage if there's a valid level range
+        if (checkStartLevel <= checkEndLevel)
+        {
+            const struct LevelUpMove *learnset = GetSpeciesLevelUpLearnset(stageSpecies);
+
+            if (firstMove)
+            {
+                // Find the first move at or after the check start level for this stage
+                while (learnset[sPostEvoLearningMoveIndex].move != LEVEL_UP_MOVE_END)
+                {
+                    if (learnset[sPostEvoLearningMoveIndex].level >= checkStartLevel &&
+                        learnset[sPostEvoLearningMoveIndex].level <= checkEndLevel)
+                    {
+                        break;
+                    }
+                    sPostEvoLearningMoveIndex++;
+                }
+                firstMove = FALSE; // Only initialize once
+            }
+
+            // Find the next move to learn in this stage's range
+            while (learnset[sPostEvoLearningMoveIndex].move != LEVEL_UP_MOVE_END)
+            {
+                if (learnset[sPostEvoLearningMoveIndex].level >= checkStartLevel &&
+                    learnset[sPostEvoLearningMoveIndex].level <= checkEndLevel)
+                {
+                    u16 move = learnset[sPostEvoLearningMoveIndex].move;
+                    sPostEvoLearningMoveIndex++; // Move to next for subsequent calls
+
+                    // Check if Pokemon already knows this move
+                    if (MonKnowsMove(mon, move))
+                        return MON_ALREADY_KNOWS_MOVE;
+
+                    // Try to give the move to the Pokemon
+                    u16 result = GiveMoveToMon(mon, move);
+                    if (result == MON_HAS_MAX_MOVES)
+                    {
+                        gMoveToLearn = move;
+                        return MON_HAS_MAX_MOVES;
+                    }
+
+                    // Successfully learned the move
+                    return move;
+                }
+                sPostEvoLearningMoveIndex++;
+            }
+        }
+
+        // Move to next evolution stage
+        sCurrentStage++;
+        sPostEvoLearningMoveIndex = 0; // Reset move index for next stage
+    }
+
+    return MOVE_NONE; // No more moves to learn from any stage
+}
+static void ContinueNurseLevelUpProcess(void)
+{
+    struct Pokemon *mon = &gPlayerParty[sNursePartyId];
+
+    // Check if we've processed all levels first (before checking messages)
+    if (sNurseCurrentLevel > sNurseTargetLevel)
+    {
+        // All levels complete, try evolution
+        bool32 canStopEvo = TRUE;
+        u16 targetSpecies = GetEvolutionTargetSpecies(mon, EVO_MODE_NORMAL, ITEM_NONE, NULL, &canStopEvo, CHECK_EVO);
+        if (targetSpecies != SPECIES_NONE)
+        {
+            gCB2_AfterEvolution = CB2_ReturnFromNurseEvolution;
+            BeginEvolutionScene(mon, targetSpecies, canStopEvo, sNursePartyId);
+        }
+        else
+        {
+            // FINISH - All level-up processing complete
+            // Buffer AFTER stats for the summary window
+            Nurse_BufferMonStats(mon, sNurseStatsAfter);
+
+            // Only show stats summary if there were actual changes
+            bool8 hasStatChanges = FALSE;
+            for (u8 i = 0; i < NUM_STATS; i++)
+            {
+                if (sNurseStatsAfter[i] != sNurseStatsBefore[i])
+                {
+                    hasStatChanges = TRUE;
+                    break;
+                }
+            }
+
+            if (hasStatChanges)
+            {
+                // Start two-page level-up stats summary, then continue to the dialog
+                CreateTask(Task_NurseStartLevelUpStats, 0);
+            }
+            else
+            {
+                // No stat changes, but still wait a moment before continuing script
+                CreateTask(Task_WaitForVramThenContinueScript, 0);
+            }
+        }
+        return;
+    }
+
+    // Try to learn a move at the current level
+    u16 result;
+    if (sNursePostEvolutionMode)
+    {
+        // In post-evolution mode: check for moves from evolution level to current level
+        result = TryLearnPostEvolutionMove(mon, sNurseEvolutionLevel, sNurseCurrentLevel, sNurseFirstMoveFlag);
+    }
+    else
+    {
+        // Normal mode: check for moves at current level only
+        result = MonTryLearningNewMoveAtLevel(mon, sNurseFirstMoveFlag, sNurseCurrentLevel);
+    }
+
+    if (result == MOVE_NONE)
+    {
+        if (sNursePostEvolutionMode)
+        {
+            // Finished learning post-evolution moves, return to normal mode
+            sNursePostEvolutionMode = FALSE;
+            sNurseFirstMoveFlag = TRUE;
+            // Continue checking for normal moves at this level
+            ContinueNurseLevelUpProcess();
+            return;
+        }
+
+        // No more moves at this level for current species
+        // Check for evolution only if we haven't processed evolution for this level yet
+        if (!sNurseEvolutionProcessed)
+        {
+            bool32 canStopEvo = TRUE;
+            u16 targetSpecies = GetEvolutionTargetSpecies(mon, EVO_MODE_NORMAL, ITEM_NONE, NULL, &canStopEvo, CHECK_EVO);
+            if (targetSpecies != SPECIES_NONE)
+            {
+                // Mark evolution as processed for this level
+                sNurseEvolutionProcessed = TRUE;
+                sNurseEvolutionLevel = sNurseCurrentLevel; // Remember at what level evolution happened
+
+                // Update evolution history: close current stage and start new one
+                if (sNurseEvolutionStageCount > 0)
+                {
+                    // End the current stage at the level before evolution
+                    sNurseEvolutionHistory[sNurseEvolutionStageCount - 1].endLevel = sNurseCurrentLevel - 1;
+                }
+
+                // Add new evolution stage (will be filled after evolution completes)
+                if (sNurseEvolutionStageCount < MAX_EVOLUTION_STAGES)
+                {
+                    sNurseEvolutionHistory[sNurseEvolutionStageCount].species = targetSpecies;
+                    sNurseEvolutionHistory[sNurseEvolutionStageCount].startLevel = sNurseCurrentLevel;
+                    sNurseEvolutionHistory[sNurseEvolutionStageCount].endLevel = sNurseTargetLevel;
+                    sNurseEvolutionStageCount++;
+                }
+
+                // Evolution available at this level - trigger it
+                gCB2_AfterEvolution = CB2_ReturnFromNurseEvolution;
+                BeginEvolutionScene(mon, targetSpecies, canStopEvo, sNursePartyId);
+                return;
+            }
+        }
+
+        // No evolution available or already processed - proceed to next level
+        sNurseCurrentLevel++;
+        sNurseFirstMoveFlag = TRUE;
+        sNurseEvolutionProcessed = FALSE; // Reset for next level
+        // Continue immediately to next level
+        ContinueNurseLevelUpProcess();
+    }
+    else if (result == MON_ALREADY_KNOWS_MOVE)
+    {
+        sNurseFirstMoveFlag = FALSE;
+        // Continue checking for more moves at same level
+        ContinueNurseLevelUpProcess();
+    }
+    else if (result == MON_HAS_MAX_MOVES)
+    {
+        // Show "trying to learn" message first
+        GetMonNickname(mon, gStringVar1);
+        StringCopy(gStringVar2, GetMoveName(gMoveToLearn));
+        StringExpandPlaceholders(gStringVar4, gText_MoveRelearnerPkmnTryingToLearnMove);
+        ShowFieldMessage(gStringVar4);
+        sNurseMoveToLearn = gMoveToLearn;
+        sNurseFirstMoveFlag = FALSE;
+
+        // Wait for message, then open summary
+        CreateTask(Task_WaitForMessageThenOpenSummary, 0);
+    }
+    else
+    {
+        // Learned the move successfully; show message
+        GetMonNickname(mon, gStringVar1);
+        StringCopy(gStringVar2, GetMoveName(result));
+        StringExpandPlaceholders(gStringVar4, gText_PkmnLearnedMove3);
+        ShowFieldMessage(gStringVar4);
+        sNurseFirstMoveFlag = FALSE;
+        // Wait for message, then continue
+        CreateTask(Task_WaitForMessageThenContinue, 0);
+    }
+}
+
+// ===== Level-up stats summary window (field) =====
+static void Nurse_BufferMonStats(struct Pokemon *mon, u16 *buf)
+{
+    // Order must match STAT_* indexes used by DrawLevelUpWindowPg1/2
+    buf[STAT_HP] = GetMonData(mon, MON_DATA_MAX_HP);
+    buf[STAT_ATK] = GetMonData(mon, MON_DATA_ATK);
+    buf[STAT_DEF] = GetMonData(mon, MON_DATA_DEF);
+    buf[STAT_SPATK] = GetMonData(mon, MON_DATA_SPATK);
+    buf[STAT_SPDEF] = GetMonData(mon, MON_DATA_SPDEF);
+    buf[STAT_SPEED] = GetMonData(mon, MON_DATA_SPEED);
+}
+
+static u8 Nurse_CreateLevelUpStatsWindow(void)
+{
+    // Field-safe window (BG 0 with standard frame/palette)
+    struct WindowTemplate template = {
+        .bg = 0,
+        .tilemapLeft = 14,
+        .tilemapTop = 2,
+        .width = 14,
+        .height = 11,
+        .paletteNum = 15,
+        .baseBlock = 100,
+    };
+
+    u8 windowId = AddWindow(&template);
+    if (windowId == WINDOW_NONE)
+        return WINDOW_NONE;
+
+    DrawStdWindowFrame(windowId, FALSE);
+    return windowId;
+}
+
+static void Nurse_RemoveLevelUpStatsWindow(u8 windowId)
+{
+    if (windowId != WINDOW_NONE)
+    {
+        ClearStdWindowAndFrame(windowId, FALSE);
+        RemoveWindow(windowId);
+    }
+}
+
+static void Task_NurseStartLevelUpStats(u8 taskId)
+{
+    // Clean up any leftover message state before showing stats
+    HideFieldMessageBox();
+
+    // Create and draw page 1 (stat deltas)
+    sNurseLevelUpWindowId = Nurse_CreateLevelUpStatsWindow();
+    if (sNurseLevelUpWindowId == WINDOW_NONE)
+    {
+        // Window creation failed, wait before continuing script
+        gTasks[taskId].func = Task_WaitForVramThenContinueScript;
+        return;
+    }
+
+    DrawLevelUpWindowPg1(sNurseLevelUpWindowId, sNurseStatsBefore, sNurseStatsAfter, TEXT_COLOR_WHITE, TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_GRAY);
+    CopyWindowToVram(sNurseLevelUpWindowId, COPYWIN_FULL);
+    ScheduleBgCopyTilemapToVram(0);
+
+    // Optional: play level up fanfare for feedback
+    PlayFanfareByFanfareNum(FANFARE_LEVEL_UP);
+    gTasks[taskId].func = Task_NurseLevelUpStatsPg1Wait;
+}
+static void Task_NurseLevelUpStatsPg1Wait(u8 taskId)
+{
+    if (WaitFanfare(FALSE) && (JOY_NEW(A_BUTTON) || JOY_NEW(B_BUTTON)))
+    {
+        PlaySE(SE_SELECT);
+        DrawLevelUpWindowPg2(sNurseLevelUpWindowId, sNurseStatsAfter, TEXT_COLOR_WHITE, TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_GRAY);
+        CopyWindowToVram(sNurseLevelUpWindowId, COPYWIN_FULL);
+        ScheduleBgCopyTilemapToVram(0);
+        gTasks[taskId].func = Task_NurseLevelUpStatsPg2Wait;
+    }
+}
+
+static void Task_NurseLevelUpStatsPg2Wait(u8 taskId)
+{
+    if (JOY_NEW(A_BUTTON) || JOY_NEW(B_BUTTON))
+    {
+        PlaySE(SE_SELECT);
+        Nurse_RemoveLevelUpStatsWindow(sNurseLevelUpWindowId);
+        sNurseLevelUpWindowId = WINDOW_NONE; // Clear reference
+        ScheduleBgCopyTilemapToVram(0);
+
+        // Wait for VRAM update before continuing to script
+        gTasks[taskId].func = Task_WaitForVramThenContinueScript;
+    }
+}
+
+static void CB2_ReturnFromNurseSelectMove(void)
+{
+    u8 slot = GetMoveSlotToReplace();
+
+    if (slot != MAX_MON_MOVES)
+    {
+        struct Pokemon *mon = &gPlayerParty[sNursePartyId];
+        u16 move = GetMonData(mon, MON_DATA_MOVE1 + slot);
+        if (!IsMoveHM(move))
+        {
+            // Replace the move
+            RemoveMonPPBonus(mon, slot);
+            SetMonMoveSlot(mon, sNurseMoveToLearn, slot);
+            CalculateMonStats(mon);
+            sNurseForgottenMove = move;
+
+            // Show the "forgot X and learned Y" message
+            SetMainCallback2(CB2_ShowForgotMoveMessage);
+            return;
+        }
+    }
+
+    // No move was replaced - continue without message
+    SetMainCallback2(CB2_ReturnToField);
+    ContinueNurseLevelUpProcess();
+}
+
+static void CB2_ReturnFromNurseEvolution(void)
+{
+    // Evolution scene complete (either evolved or cancelled)
+    // Enter post-evolution mode to check for moves from evolution level to current level
+    sNursePostEvolutionMode = TRUE;
+    sNurseFirstMoveFlag = TRUE;
+
+    // Set field callback to handle fade-in and continue the level-up process
+    gFieldCallback = FieldCB_ContinueNurseLevelUp;
+    CB2_ReturnToField();
+}
+#undef tState
+#undef tPartyId
+#undef tCurrentLevel
+#undef tTargetLevel
+#undef tFirstMoveFlag
