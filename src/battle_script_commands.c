@@ -76,6 +76,7 @@
 #include "follower_npc.h"
 #include "load_save.h"
 #include "field_specials.h"
+#include "reset_trainer_flags.h"
 
 // table to avoid ugly powing on gba (courtesy of doesnt)
 // this returns (i^2.5)/4
@@ -8852,6 +8853,7 @@ static void Cmd_getmoneyreward(void)
         }
 
         RemoveMoney(&gSaveBlock1Ptr->money, money);
+        ResetAllTrainerFlags();
     }
 
     PREPARE_WORD_NUMBER_BUFFER(gBattleTextBuff1, 5, money);
