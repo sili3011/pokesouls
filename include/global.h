@@ -582,8 +582,8 @@ struct SaveBlock2
     u16 optionsBattleStyle : 1;        // OPTIONS_BATTLE_STYLE_[SHIFT/SET]
     u16 optionsBattleSceneOff : 1;     // whether battle animations are disabled
     u16 regionMapZoom : 1;             // whether the map is zoomed in
-    // u16 padding1:4;
-    // u16 padding2;
+                                       // u16 padding1:4;
+                                       // u16 padding2;
     /*0x18*/ struct Pokedex pokedex;
     /*0x90*/ u8 filler_90[0x8];
     /*0x98*/ struct Time localTimeOffset;
@@ -1081,22 +1081,24 @@ struct SaveBlock1
     /*0x988*/ u8 filler1[0x34]; // Previously Dex Flags, feel free to remove.
 #endif                          // FREE_EXTRA_SEEN_FLAGS_SAVEBLOCK1
     /*0x9BC*/ u16 berryBlenderRecords[3];
-    /*0x9C2*/ u8 unused_9C2[6];
+    /*0x9C2*/ u16 moneyLostToTrainer; // Trainer ID who took our money
+    /*0x9C4*/ u32 moneyLostAmount;    // Amount of money lost to that trainer
+    /*0x9C8*/ u8 unused_9C8[16];      // Former wild money loss fields, now using variables
 #if FREE_MATCH_CALL == FALSE
-    /*0x9C8*/ u16 trainerRematchStepCounter;
+    /*0x9D4*/ u16 trainerRematchStepCounter;
     // MAX_REMATCH_ENTRIES decreased from vanilla's 100 to 92
     // This is to accomodate 4 non-vanilla registeredItems
-    /*0x9CA*/ u8 trainerRematches[MAX_REMATCH_ENTRIES];
+    /*0x9D6*/ u8 trainerRematches[MAX_REMATCH_ENTRIES];
 #endif // FREE_MATCH_CALL
-    /*0xA26*/ u16 registeredItems[MAX_REGISTERED_ITEMS];
-    /*0xA2E*/ // u8 padding3[2];
-    /*0xA30*/ struct ObjectEvent objectEvents[OBJECT_EVENTS_COUNT];
-    /*0xC70*/ struct ObjectEventTemplate objectEventTemplates[OBJECT_EVENT_TEMPLATES_COUNT];
-    /*0x1270*/ u8 flags[NUM_FLAG_BYTES];
-    /*0x139C*/ u16 vars[VARS_COUNT];
-    /*0x159C*/ u32 gameStats[NUM_GAME_STATS];
-    /*0x169C*/ struct BerryTree berryTrees[BERRY_TREES_COUNT];
-    /*0x1A9C*/ struct SecretBase secretBases[SECRET_BASES_COUNT];
+    /*0xA32*/ u16 registeredItems[MAX_REGISTERED_ITEMS];
+    /*0xA3A*/ // u8 padding3[2];
+    /*0xA3C*/ struct ObjectEvent objectEvents[OBJECT_EVENTS_COUNT];
+    /*0xC7C*/ struct ObjectEventTemplate objectEventTemplates[OBJECT_EVENT_TEMPLATES_COUNT];
+    /*0x127C*/ u8 flags[NUM_FLAG_BYTES];
+    /*0x13A8*/ u16 vars[VARS_COUNT];
+    /*0x15A8*/ u32 gameStats[NUM_GAME_STATS];
+    /*0x16A8*/ struct BerryTree berryTrees[BERRY_TREES_COUNT];
+    /*0x1AA8*/ struct SecretBase secretBases[SECRET_BASES_COUNT];
     /*0x271C*/ u8 playerRoomDecorations[DECOR_MAX_PLAYERS_HOUSE];
     /*0x2728*/ u8 playerRoomDecorationPositions[DECOR_MAX_PLAYERS_HOUSE];
     /*0x2734*/ u8 decorationDesks[10];

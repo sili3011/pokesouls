@@ -1102,6 +1102,34 @@ EventScript_VsSeekerChargingDone::
 	releaseall
 	end
 
+WildMoneyRecovery_EventScript::
+	lock
+	faceplayer
+	playfanfare MUS_OBTAIN_ITEM
+	msgbox WildMoneyRecovery_Text_FoundYourMoney, MSGBOX_DEFAULT
+	waitfanfare
+	copyvar VAR_0x8004, VAR_WILD_MONEY_LOST
+	addmoney VAR_0x8004
+	buffernumberstring STR_VAR_1, VAR_0x8004
+	msgbox WildMoneyRecovery_Text_RecoveredMoney, MSGBOX_DEFAULT
+	@ Clear the wild money loss data
+	setvar VAR_WILD_MONEY_LOST, 0
+	setvar VAR_WILD_MONEY_LOST_MAP_GROUP, 0
+	setvar VAR_WILD_MONEY_LOST_MAP_NUM, 0
+	setvar VAR_WILD_MONEY_LOST_X, 0
+	setvar VAR_WILD_MONEY_LOST_Y, 0
+	removeobject VAR_LAST_TALKED
+	release
+	end
+
+WildMoneyRecovery_Text_FoundYourMoney:
+	.string "You found a bag containing the money\n"
+	.string "you lost in your last wild POKéMON\l"
+	.string "encounter!$"
+
+WildMoneyRecovery_Text_RecoveredMoney:
+	.string "You recovered ¥{STR_VAR_1}!$"
+
 	.include "data/scripts/pc_transfer.inc"
 	.include "data/scripts/questionnaire.inc"
 	.include "data/scripts/abnormal_weather.inc"
