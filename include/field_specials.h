@@ -39,5 +39,6 @@ bool32 CheckPartyHasSpecies(u32);
 void GiveExpFromNurse(void);
 void MoneyInputForExp(void);
 void RefillPotionFlask(void);
+void TryPlaceWildMoneyRecoveryItem(void);
 
 #endif // GUARD_FIELD_SPECIALS_H

@@ -18,6 +18,12 @@
 #include "recorded_battle.h"
 #include "window.h"
 #include "reshow_battle_screen.h"
+#include "constants/vars.h"
+#include "event_data.h"
+#include "event_object_movement.h"
+#include "event_scripts.h"
+#include "fieldmap.h"
+#include "overworld.h"
 #include "main.h"
 #include "palette.h"
 #include "money.h"
@@ -61,6 +67,7 @@
 #include "constants/rgb.h"
 #include "constants/songs.h"
 #include "constants/trainer_slide.h"
+#include "constants/trainer_types.h"
 #include "constants/trainers.h"
 #include "battle_util.h"
 #include "constants/pokemon.h"
@@ -68,6 +75,7 @@
 #include "data/battle_move_effects.h"
 #include "follower_npc.h"
 #include "load_save.h"
+#include "field_specials.h"
 
 // table to avoid ugly powing on gba (courtesy of doesnt)
 // this returns (i^2.5)/4
@@ -8825,9 +8833,23 @@ static void Cmd_getmoneyreward(void)
     {
         money = GetMoney(&gSaveBlock1Ptr->money);
 
-        // Track which trainer took our money
-        gSaveBlock1Ptr->moneyLostToTrainer = TRAINER_BATTLE_PARAM.opponentA;
-        gSaveBlock1Ptr->moneyLostAmount = money;
+        if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
+        {
+            // Track which trainer took our money
+            gSaveBlock1Ptr->moneyLostToTrainer = TRAINER_BATTLE_PARAM.opponentA;
+            gSaveBlock1Ptr->moneyLostAmount = money;
+            VarSet(VAR_WILD_MONEY_LOST, 0);
+        }
+        else
+        {
+            // Wild Pokémon battle - store money loss location
+            VarSet(VAR_WILD_MONEY_LOST, money);
+            VarSet(VAR_WILD_MONEY_LOST_MAP_GROUP, gSaveBlock1Ptr->location.mapGroup);
+            VarSet(VAR_WILD_MONEY_LOST_MAP_NUM, gSaveBlock1Ptr->location.mapNum);
+            VarSet(VAR_WILD_MONEY_LOST_X, gSaveBlock1Ptr->pos.x);
+            VarSet(VAR_WILD_MONEY_LOST_Y, gSaveBlock1Ptr->pos.y);
+            gSaveBlock1Ptr->moneyLostAmount = 0;
+        }
 
         RemoveMoney(&gSaveBlock1Ptr->money, money);
     }
