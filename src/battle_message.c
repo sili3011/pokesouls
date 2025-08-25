@@ -192,7 +192,7 @@ const u8 *const gBattleStringsTable[STRINGID_COUNT] =
         [STRINGID_PLAYERGOTMONEY] = COMPOUND_STRING("You got ¥{B_BUFF1} for winning!\p"),
         [STRINGID_PLAYERWHITEOUT] = COMPOUND_STRING("You have no more Pokémon that can fight!\p"),
 #if B_WHITEOUT_MONEY >= GEN_4
-        [STRINGID_PLAYERWHITEOUT2] = COMPOUND_STRING("You lost all your ¥{B_BUFF1} souls…\pYou were overwhelmed by your defeat!{PAUSE_UNTIL_PRESS}"),
+        [STRINGID_PLAYERWHITEOUT2] = COMPOUND_STRING("You lost all of your ¥{B_BUFF1}…\pYou were overwhelmed by your defeat!{PAUSE_UNTIL_PRESS}"),
 // [STRINGID_PLAYERWHITEOUT2]                      = COMPOUND_STRING("You panicked and dropped ¥{B_BUFF1}…\pYou were overwhelmed by your defeat!{PAUSE_UNTIL_PRESS}"),
 #else
         [STRINGID_PLAYERWHITEOUT2] = COMPOUND_STRING("You were overwhelmed by your defeat!{PAUSE_UNTIL_PRESS}"),
@@ -777,7 +777,7 @@ const u8 *const gBattleStringsTable[STRINGID_COUNT] =
         [STRINGID_HEATUPBEAK] = COMPOUND_STRING("{B_ATK_NAME_WITH_PREFIX} started heating up its beak!"),
         [STRINGID_COURTCHANGE] = COMPOUND_STRING("{B_ATK_NAME_WITH_PREFIX} swapped the battle effects affecting each side of the field!"),
         [STRINGID_PLAYERLOSTTOENEMYTRAINER] = COMPOUND_STRING("You have no more Pokémon that can fight!\pYou lost to {B_TRAINER1_NAME_WITH_CLASS}!{PAUSE_UNTIL_PRESS}"),
-        [STRINGID_PLAYERPAIDPRIZEMONEY] = COMPOUND_STRING("You lost all your souls to the winner…\pYour vision fades...{PAUSE_UNTIL_PRESS}"),
+        [STRINGID_PLAYERPAIDPRIZEMONEY] = COMPOUND_STRING("You lost all your money to the winner…\pYour vision fades...{PAUSE_UNTIL_PRESS}"),
         // [STRINGID_PLAYERPAIDPRIZEMONEY] = COMPOUND_STRING("You gave ¥{B_BUFF1} to the winner…\pYou were overwhelmed by your defeat!{PAUSE_UNTIL_PRESS}"),
         [STRINGID_ZPOWERSURROUNDS] = COMPOUND_STRING("{B_ATK_NAME_WITH_PREFIX} surrounded itself with its Z-Power!"),
         [STRINGID_ZMOVEUNLEASHED] = COMPOUND_STRING("{B_ATK_NAME_WITH_PREFIX} unleashes its full-force Z-Move!"),
@@ -900,7 +900,7 @@ const u8 *const gBattleStringsTable[STRINGID_COUNT] =
         [STRINGID_TIMETODYNAMAX] = COMPOUND_STRING("Time to Dynamax!"),
         [STRINGID_TIMETOGIGANTAMAX] = COMPOUND_STRING("Time to Gigantamax!"),
         [STRINGID_QUESTIONFORFEITBATTLE] = COMPOUND_STRING("Would you like to give up on this battle and quit now? Quitting the battle is the same as losing the battle."),
-        [STRINGID_FORFEITBATTLEGAVEMONEY] = COMPOUND_STRING("You've been knocked out and lost all ¥{B_BUFF1} souls…{PAUSE_UNTIL_PRESS}"),
+        [STRINGID_FORFEITBATTLEGAVEMONEY] = COMPOUND_STRING("You've been knocked out and lost all of your ¥{B_BUFF1}…{PAUSE_UNTIL_PRESS}"),
         [STRINGID_POWERCONSTRUCTPRESENCEOFMANY] = COMPOUND_STRING("You sense the presence of many!"),
         [STRINGID_POWERCONSTRUCTTRANSFORM] = COMPOUND_STRING("{B_ATK_NAME_WITH_PREFIX} transformed into its Complete Forme!"),
 };

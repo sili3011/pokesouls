@@ -898,9 +898,10 @@ LittlerootTown_EventScript_SetReceivedPotionFlask::
 
 LittlerootTown_EventScript_GivePotionFlask::
 	msgbox LittlerootTown_Text_TakeThisPotionFlask, MSGBOX_DEFAULT
+	playfanfare MUS_OBTAIN_ITEM
 	giveitem ITEM_POTION_FLASK, 1
+	waitfanfare
 	special RefillPotionFlask
-	call_if_eq VAR_RESULT, FALSE, Common_EventScript_ShowBagIsFull
 	msgbox LittlerootTown_Text_ExplainPotionFlask, MSGBOX_DEFAULT
 	msgbox LittlerootTown_Text_ComeHomeIfAnythingHappens, MSGBOX_DEFAULT
 	closemessage
@@ -930,9 +931,7 @@ LittlerootTown_Text_TakeThisPotionFlask:
 	.string "You're your father's child, all right.\n"
 	.string "You look good together with POKéMON!\p"
 	.string "Here, honey! If you're going out on an\n"
-	.string "adventure, take this POTION FLASK.\p"
-	.string "It's a special container that can hold\n"
-	.string "healing potions for your POKéMON!$"
+	.string "adventure, take this POTION FLASK.$"
 
 LittlerootTown_Text_ReceivedPotionFlask:
 	.string "{PLAYER} received the POTION FLASK\n"
@@ -941,10 +940,10 @@ LittlerootTown_Text_ReceivedPotionFlask:
 LittlerootTown_Text_ExplainPotionFlask:
 	.string "MOM: {PLAYER}, this flask is very\n"
 	.string "useful.\p"
-	.string "“Press the B Button while wearing these\n"
-	.string "RUNNING SHOES to run extra-fast!\p"
-	.string "“Slip on these RUNNING SHOES and race\n"
-	.string "in the great outdoors!”$"
+	.string "It can hold healing up to 3 potions\n"
+	.string "for your POKéMON.\p"
+	.string "You can use it to keep your POKéMON\n"
+	.string "healthy in between POKéMON centers!$"
 
 LittlerootTown_Text_ComeHomeIfAnythingHappens:
 	.string "… … … … … … … …\n"

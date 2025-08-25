@@ -5277,8 +5277,8 @@ static void CB2_ReturnFromNurseSelectMove(void)
     }
 
     // No move was replaced - continue without message
+    gFieldCallback = FieldCB_ContinueNurseLevelUp;
     SetMainCallback2(CB2_ReturnToField);
-    ContinueNurseLevelUpProcess();
 }
 
 static void CB2_ReturnFromNurseEvolution(void)
