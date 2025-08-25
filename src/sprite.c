@@ -8,21 +8,21 @@
 #define sAnchorX data[6]
 #define sAnchorY data[7]
 
-#define SET_SPRITE_TILE_RANGE(index, start, count) \
-{                                                  \
-    sSpriteTileRanges[index * 2] = start;          \
-    (sSpriteTileRanges + 1)[index * 2] = count;    \
-}
+#define SET_SPRITE_TILE_RANGE(index, start, count)  \
+    {                                               \
+        sSpriteTileRanges[index * 2] = start;       \
+        (sSpriteTileRanges + 1)[index * 2] = count; \
+    }
 
-#define ALLOC_SPRITE_TILE(n)                             \
-{                                                        \
-    sSpriteTileAllocBitmap[(n) / 8] |= (1 << ((n) % 8)); \
-}
+#define ALLOC_SPRITE_TILE(n)                                 \
+    {                                                        \
+        sSpriteTileAllocBitmap[(n) / 8] |= (1 << ((n) % 8)); \
+    }
 
-#define FREE_SPRITE_TILE(n)                               \
-{                                                         \
-    sSpriteTileAllocBitmap[(n) / 8] &= ~(1 << ((n) % 8)); \
-}
+#define FREE_SPRITE_TILE(n)                                   \
+    {                                                         \
+        sSpriteTileAllocBitmap[(n) / 8] &= ~(1 << ((n) % 8)); \
+    }
 
 #define SPRITE_TILE_IS_ALLOCATED(n) ((sSpriteTileAllocBitmap[(n) / 8] >> ((n) % 8)) & 1)
 
@@ -94,24 +94,23 @@ typedef void (*AnimFunc)(struct Sprite *);
 typedef void (*AnimCmdFunc)(struct Sprite *);
 typedef void (*AffineAnimCmdFunc)(u8 matrixNum, struct Sprite *);
 
-#define DUMMY_OAM_DATA                      \
-{                                           \
-    .y = DISPLAY_HEIGHT,                    \
-    .affineMode = ST_OAM_AFFINE_OFF,        \
-    .objMode = 0,                           \
-    .mosaic = FALSE,                        \
-    .bpp = 0,                               \
-    .shape = SPRITE_SHAPE(8x8),             \
-    .x = DISPLAY_WIDTH + 64,                \
-    .matrixNum = 0,                         \
-    .size = SPRITE_SIZE(8x8),               \
-    .tileNum = 0,                           \
-    .priority = 3, /* lowest priority */    \
-    .paletteNum = 0,                        \
-    .affineParam = 0                        \
-}
+#define DUMMY_OAM_DATA                       \
+    {                                        \
+        .y = DISPLAY_HEIGHT,                 \
+        .affineMode = ST_OAM_AFFINE_OFF,     \
+        .objMode = 0,                        \
+        .mosaic = FALSE,                     \
+        .bpp = 0,                            \
+        .shape = SPRITE_SHAPE(8x8),          \
+        .x = DISPLAY_WIDTH + 64,             \
+        .matrixNum = 0,                      \
+        .size = SPRITE_SIZE(8x8),            \
+        .tileNum = 0,                        \
+        .priority = 3, /* lowest priority */ \
+        .paletteNum = 0,                     \
+        .affineParam = 0}
 
-#define ANIM_END        0xFFFF
+#define ANIM_END 0xFFFF
 #define AFFINE_ANIM_END 0x7FFF
 
 // forward declarations
@@ -120,136 +119,137 @@ const union AffineAnimCmd *const gDummySpriteAffineAnimTable[];
 const struct SpriteTemplate gDummySpriteTemplate;
 
 static const u8 sCenterToCornerVecTable[3][4][2] =
-{
-    {   // square
-        {  -4,  -4 },
-        {  -8,  -8 },
-        { -16, -16 },
-        { -32, -32 },
-    },
-    {   // horizontal rectangle
-        {  -8,  -4 },
-        { -16,  -4 },
-        { -16,  -8 },
-        { -32, -16 },
-    },
-    {   // vertical rectangle
-        {  -4,  -8 },
-        {  -4, -16 },
-        {  -8, -16 },
-        { -16, -32 },
-    },
+    {
+        {
+            // square
+            {-4, -4},
+            {-8, -8},
+            {-16, -16},
+            {-32, -32},
+        },
+        {
+            // horizontal rectangle
+            {-8, -4},
+            {-16, -4},
+            {-16, -8},
+            {-32, -16},
+        },
+        {
+            // vertical rectangle
+            {-4, -8},
+            {-4, -16},
+            {-8, -16},
+            {-16, -32},
+        },
 };
 
 static const struct Sprite sDummySprite =
-{
-    .oam = DUMMY_OAM_DATA,
-    .anims = gDummySpriteAnimTable,
-    .affineAnims = gDummySpriteAffineAnimTable,
-    .template = &gDummySpriteTemplate,
-    .callback = SpriteCallbackDummy,
-    .x = DISPLAY_WIDTH + 64,
-    .y = DISPLAY_HEIGHT,
-    .subpriority = 0xFF
-};
+    {
+        .oam = DUMMY_OAM_DATA,
+        .anims = gDummySpriteAnimTable,
+        .affineAnims = gDummySpriteAffineAnimTable,
+        .template = &gDummySpriteTemplate,
+        .callback = SpriteCallbackDummy,
+        .x = DISPLAY_WIDTH + 64,
+        .y = DISPLAY_HEIGHT,
+        .subpriority = 0xFF};
 
 const struct OamData gDummyOamData = DUMMY_OAM_DATA;
 
-static const union AnimCmd sDummyAnim = { ANIM_END };
+static const union AnimCmd sDummyAnim = {ANIM_END};
 
-const union AnimCmd *const gDummySpriteAnimTable[] = { &sDummyAnim };
+const union AnimCmd *const gDummySpriteAnimTable[] = {&sDummyAnim};
 
-static const union AffineAnimCmd sDummyAffineAnim = { AFFINE_ANIM_END };
+static const union AffineAnimCmd sDummyAffineAnim = {AFFINE_ANIM_END};
 
-const union AffineAnimCmd *const gDummySpriteAffineAnimTable[] = { &sDummyAffineAnim };
+const union AffineAnimCmd *const gDummySpriteAffineAnimTable[] = {&sDummyAffineAnim};
 
 const struct SpriteTemplate gDummySpriteTemplate =
-{
-    .tileTag = 0,
-    .paletteTag = TAG_NONE,
-    .oam = &gDummyOamData,
-    .anims = gDummySpriteAnimTable,
-    .images = NULL,
-    .affineAnims = gDummySpriteAffineAnimTable,
-    .callback = SpriteCallbackDummy
-};
+    {
+        .tileTag = 0,
+        .paletteTag = TAG_NONE,
+        .oam = &gDummyOamData,
+        .anims = gDummySpriteAnimTable,
+        .images = NULL,
+        .affineAnims = gDummySpriteAffineAnimTable,
+        .callback = SpriteCallbackDummy};
 
 static const AnimFunc sAnimFuncs[] =
-{
-    ContinueAnim,
-    BeginAnim,
+    {
+        ContinueAnim,
+        BeginAnim,
 };
 
 static const AnimFunc sAffineAnimFuncs[] =
-{
-    ContinueAffineAnim,
-    BeginAffineAnim,
+    {
+        ContinueAffineAnim,
+        BeginAffineAnim,
 };
 
 static const AnimCmdFunc sAnimCmdFuncs[] =
-{
-    AnimCmd_loop,
-    AnimCmd_jump,
-    AnimCmd_end,
-    AnimCmd_frame,
+    {
+        AnimCmd_loop,
+        AnimCmd_jump,
+        AnimCmd_end,
+        AnimCmd_frame,
 };
 
 static const AffineAnimCmdFunc sAffineAnimCmdFuncs[] =
-{
-    AffineAnimCmd_loop,
-    AffineAnimCmd_jump,
-    AffineAnimCmd_end,
-    AffineAnimCmd_frame,
+    {
+        AffineAnimCmd_loop,
+        AffineAnimCmd_jump,
+        AffineAnimCmd_end,
+        AffineAnimCmd_frame,
 };
 
 static const struct OamDimensions32 sOamDimensions32[3][4] =
-{
-    [ST_OAM_SQUARE] =
     {
-        [SPRITE_SIZE(8x8)]   = {  8,  8 },
-        [SPRITE_SIZE(16x16)] = { 16, 16 },
-        [SPRITE_SIZE(32x32)] = { 32, 32 },
-        [SPRITE_SIZE(64x64)] = { 64, 64 },
-    },
-    [ST_OAM_H_RECTANGLE] =
-    {
-        [SPRITE_SIZE(16x8)]  = { 16,  8 },
-        [SPRITE_SIZE(32x8)]  = { 32,  8 },
-        [SPRITE_SIZE(32x16)] = { 32, 16 },
-        [SPRITE_SIZE(64x32)] = { 64, 32 },
-    },
-    [ST_OAM_V_RECTANGLE] =
-    {
-        [SPRITE_SIZE(8x16)]  = {  8, 16 },
-        [SPRITE_SIZE(8x32)]  = {  8, 32 },
-        [SPRITE_SIZE(16x32)] = { 16, 32 },
-        [SPRITE_SIZE(32x64)] = { 32, 64 },
-    },
+        [ST_OAM_SQUARE] =
+            {
+                [SPRITE_SIZE(8x8)] = {8, 8},
+                [SPRITE_SIZE(16x16)] = {16, 16},
+                [SPRITE_SIZE(32x32)] = {32, 32},
+                [SPRITE_SIZE(64x64)] = {64, 64},
+            },
+        [ST_OAM_H_RECTANGLE] =
+            {
+                [SPRITE_SIZE(16x8)] = {16, 8},
+                [SPRITE_SIZE(32x8)] = {32, 8},
+                [SPRITE_SIZE(32x16)] = {32, 16},
+                [SPRITE_SIZE(64x32)] = {64, 32},
+            },
+        [ST_OAM_V_RECTANGLE] =
+            {
+                [SPRITE_SIZE(8x16)] = {8, 16},
+                [SPRITE_SIZE(8x32)] = {8, 32},
+                [SPRITE_SIZE(16x32)] = {16, 32},
+                [SPRITE_SIZE(32x64)] = {32, 64},
+            },
 };
 
 static const struct OamDimensions sOamDimensions[3][4] =
-{
-    [ST_OAM_SQUARE] =
     {
-        [SPRITE_SIZE(8x8)]   = {  8,  8 },
-        [SPRITE_SIZE(16x16)] = { 16, 16 },
-        [SPRITE_SIZE(32x32)] = { 32, 32 },
-        [SPRITE_SIZE(64x64)] = { 64, 64 },
-    },
-    [ST_OAM_H_RECTANGLE] =
-    {
-        [SPRITE_SIZE(16x8)]  = { 16,  8 },
-        [SPRITE_SIZE(32x8)]  = { 32,  8 },
-        [SPRITE_SIZE(32x16)] = { 32, 16 },
-        [SPRITE_SIZE(64x32)] = { 64, 32 },
-    },
-    [ST_OAM_V_RECTANGLE] =
-    {
-        [SPRITE_SIZE(8x16)]  = {  8, 16 },
-        [SPRITE_SIZE(8x32)]  = {  8, 32 },
-        [SPRITE_SIZE(16x32)] = { 16, 32 },
-        [SPRITE_SIZE(32x64)] = { 32, 64 },
-    },
+        [ST_OAM_SQUARE] =
+            {
+                [SPRITE_SIZE(8x8)] = {8, 8},
+                [SPRITE_SIZE(16x16)] = {16, 16},
+                [SPRITE_SIZE(32x32)] = {32, 32},
+                [SPRITE_SIZE(64x64)] = {64, 64},
+            },
+        [ST_OAM_H_RECTANGLE] =
+            {
+                [SPRITE_SIZE(16x8)] = {16, 8},
+                [SPRITE_SIZE(32x8)] = {32, 8},
+                [SPRITE_SIZE(32x16)] = {32, 16},
+                [SPRITE_SIZE(64x32)] = {64, 32},
+            },
+        [ST_OAM_V_RECTANGLE] =
+            {
+                [SPRITE_SIZE(8x16)] = {8, 16},
+                [SPRITE_SIZE(8x32)] = {8, 32},
+                [SPRITE_SIZE(16x32)] = {16, 32},
+                [SPRITE_SIZE(32x64)] = {32, 64},
+            },
 };
 
 // iwram bss
@@ -357,8 +357,7 @@ void BuildOamBuffer(void)
         {
             y -= 256;
         }
-        else if (sprite->oam.affineMode == ST_OAM_AFFINE_DOUBLE
-              && sprite->oam.size == ST_OAM_SIZE_3)
+        else if (sprite->oam.affineMode == ST_OAM_AFFINE_DOUBLE && sprite->oam.size == ST_OAM_SIZE_3)
         {
             u32 shape = sprite->oam.shape;
             if (shape == ST_OAM_SQUARE || shape == ST_OAM_V_RECTANGLE)
@@ -369,11 +368,7 @@ void BuildOamBuffer(void)
         }
 
         // y in [-128...159], so (159 - y) in [0..287].
-        spritePriorities[toSort++]
-            = (sprite->oam.priority << 30)
-            | (sprite->subpriority << 22)
-            | (((159 - y) & 0x1FF) << 13)
-            | (index << 0);
+        spritePriorities[toSort++] = (sprite->oam.priority << 30) | (sprite->subpriority << 22) | (((159 - y) & 0x1FF) << 13) | (index << 0);
     }
 
     SortSprites(spritePriorities, toSort);
@@ -1763,21 +1758,21 @@ bool8 AddSubspritesToOamBuffer(struct Sprite *sprite, struct OamData *destOam, u
 }
 
 static const u8 sSpanPerImage[4][4] =
-{
-    [ST_OAM_SQUARE] =
     {
-        [ST_OAM_SIZE_0] = 0, // SPRITE_SIZE_8x8
-        [ST_OAM_SIZE_1] = 2, // SPRITE_SIZE_16x16
-        [ST_OAM_SIZE_2] = 4, // SPRITE_SIZE_32x32
-        [ST_OAM_SIZE_3] = 6  // SPRITE_SIZE_64x64
-    },
-    [ST_OAM_H_RECTANGLE ... ST_OAM_V_RECTANGLE] =
-    {
-        [ST_OAM_SIZE_0] = 1, // SPRITE_SIZE_16x8
-        [ST_OAM_SIZE_1] = 2, // SPRITE_SIZE_32x8
-        [ST_OAM_SIZE_2] = 3, // SPRITE_SIZE_32x16
-        [ST_OAM_SIZE_3] = 5  // SPRITE_SIZE_64x32
-    },
+        [ST_OAM_SQUARE] =
+            {
+                [ST_OAM_SIZE_0] = 0, // SPRITE_SIZE_8x8
+                [ST_OAM_SIZE_1] = 2, // SPRITE_SIZE_16x16
+                [ST_OAM_SIZE_2] = 4, // SPRITE_SIZE_32x32
+                [ST_OAM_SIZE_3] = 6  // SPRITE_SIZE_64x64
+            },
+        [ST_OAM_H_RECTANGLE... ST_OAM_V_RECTANGLE] =
+            {
+                [ST_OAM_SIZE_0] = 1, // SPRITE_SIZE_16x8
+                [ST_OAM_SIZE_1] = 2, // SPRITE_SIZE_32x8
+                [ST_OAM_SIZE_2] = 3, // SPRITE_SIZE_32x16
+                [ST_OAM_SIZE_3] = 5  // SPRITE_SIZE_64x32
+            },
 };
 
 // For a given sprite shape & size, returns

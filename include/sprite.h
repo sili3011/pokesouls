@@ -11,14 +11,14 @@
 
 struct SpriteSheet
 {
-    const void *data;  // Raw uncompressed pixel data
+    const void *data; // Raw uncompressed pixel data
     u16 size;
     u16 tag;
 };
 
 struct CompressedSpriteSheet
 {
-    const u32 *data;  // LZ77 compressed pixel data
+    const u32 *data; // LZ77 compressed pixel data
     u16 size;        // Uncompressed size of pixel data
     u16 tag;
 };
@@ -32,12 +32,12 @@ struct SpriteFrameImage
 
 #define obj_frame_tiles(ptr) {.data = (u8 *)ptr, .size = sizeof ptr}
 
-#define overworld_frame(ptr, width, height, frame) {.data = (u8 *)ptr + (width * height * frame * 64)/2, .size = (width * height * 64)/2}
-#define overworld_ascending_frames(ptr, width, height) {.data = (u8 *)ptr, .size = (width * height * 64)/2, .relativeFrames=TRUE}
+#define overworld_frame(ptr, width, height, frame) {.data = (u8 *)ptr + (width * height * frame * 64) / 2, .size = (width * height * 64) / 2}
+#define overworld_ascending_frames(ptr, width, height) {.data = (u8 *)ptr, .size = (width * height * 64) / 2, .relativeFrames = TRUE}
 
 struct SpritePalette
 {
-    const u16 *data;  // Raw uncompressed palette data
+    const u16 *data; // Raw uncompressed palette data
     u16 tag;
 };
 
@@ -45,23 +45,23 @@ struct AnimFrameCmd
 {
     // If the sprite has an array of images, this is the array index.
     // If the sprite has a sheet, this is the tile offset.
-    u32 imageValue:16;
+    u32 imageValue : 16;
 
-    u32 duration:6;
-    u32 hFlip:1;
-    u32 vFlip:1;
+    u32 duration : 6;
+    u32 hFlip : 1;
+    u32 vFlip : 1;
 };
 
 struct AnimLoopCmd
 {
-    u32 type:16;
-    u32 count:6;
+    u32 type : 16;
+    u32 count : 6;
 };
 
 struct AnimJumpCmd
 {
-    u32 type:16;
-    u32 target:6;
+    u32 type : 16;
+    u32 target : 6;
 };
 
 // The first halfword of this union specifies the type of command.
@@ -75,12 +75,20 @@ union AnimCmd
     struct AnimJumpCmd jump;
 };
 
-#define ANIMCMD_FRAME(...) \
-    {.frame = {__VA_ARGS__}}
-#define ANIMCMD_LOOP(_count) \
-    {.loop = {.type = -3, .count = _count}}
-#define ANIMCMD_JUMP(_target) \
-    {.jump = {.type = -2, .target = _target}}
+#define ANIMCMD_FRAME(...)       \
+    {                            \
+        .frame = { __VA_ARGS__ } \
+    }
+#define ANIMCMD_LOOP(_count)       \
+    {                              \
+        .loop = {.type = -3,       \
+                 .count = _count } \
+    }
+#define ANIMCMD_JUMP(_target)        \
+    {                                \
+        .jump = {.type = -2,         \
+                 .target = _target } \
+    }
 #define ANIMCMD_END \
     {.type = -1}
 
@@ -121,18 +129,32 @@ union AffineAnimCmd
 
 #define AFFINEANIMCMDTYPE_LOOP 0x7FFD
 #define AFFINEANIMCMDTYPE_JUMP 0x7FFE
-#define AFFINEANIMCMDTYPE_END  0x7FFF
+#define AFFINEANIMCMDTYPE_END 0x7FFF
 
 #define AFFINEANIMCMD_FRAME(_xScale, _yScale, _rotation, _duration) \
-    {.frame = {.xScale = _xScale, .yScale = _yScale, .rotation = _rotation, .duration = _duration}}
-#define AFFINEANIMCMD_LOOP(_count) \
-    {.loop = {.type = AFFINEANIMCMDTYPE_LOOP, .count = _count}}
-#define AFFINEANIMCMD_JUMP(_target) \
-    {.jump = {.type = AFFINEANIMCMDTYPE_JUMP, .target = _target}}
+    {                                                               \
+        .frame = {.xScale = _xScale,                                \
+                  .yScale = _yScale,                                \
+                  .rotation = _rotation,                            \
+                  .duration = _duration }                           \
+    }
+#define AFFINEANIMCMD_LOOP(_count)               \
+    {                                            \
+        .loop = {.type = AFFINEANIMCMDTYPE_LOOP, \
+                 .count = _count }               \
+    }
+#define AFFINEANIMCMD_JUMP(_target)              \
+    {                                            \
+        .jump = {.type = AFFINEANIMCMDTYPE_JUMP, \
+                 .target = _target }             \
+    }
 #define AFFINEANIMCMD_END \
     {.type = AFFINEANIMCMDTYPE_END}
-#define AFFINEANIMCMD_END_ALT(_val) \
-    {.end = {.type = AFFINEANIMCMDTYPE_END, .val = _val}}
+#define AFFINEANIMCMD_END_ALT(_val)            \
+    {                                          \
+        .end = {.type = AFFINEANIMCMDTYPE_END, \
+                .val = _val }                  \
+    }
 
 struct AffineAnimState
 {
@@ -156,10 +178,10 @@ struct Subsprite
 {
     s8 x; // was u16 in R/S
     s8 y; // was u16 in R/S
-    u16 shape:2;
-    u16 size:2;
-    u16 tileOffset:10;
-    u16 priority:2;
+    u16 shape : 2;
+    u16 size : 2;
+    u16 tileOffset : 10;
+    u16 priority : 2;
 };
 
 struct SubspriteTable
@@ -204,39 +226,39 @@ struct Sprite
 
     /*0x2A*/ u8 animNum;
     /*0x2B*/ u8 animCmdIndex;
-    /*0x2C*/ u8 animDelayCounter:6;
-             bool8 animPaused:1;
-             bool8 affineAnimPaused:1;
+    /*0x2C*/ u8 animDelayCounter : 6;
+    bool8 animPaused : 1;
+    bool8 affineAnimPaused : 1;
     /*0x2D*/ u8 animLoopCounter;
 
     // general purpose data fields
     /*0x2E*/ s16 data[8];
 
-    /*0x3E*/ u16 inUse:1;                   //1
-             u16 coordOffsetEnabled:1;      //2
-             u16 invisible:1;               //4
-             u16 flags_3:1;                 //8
-             // if nonzero, tile offset for usingSheet sprites
-             // is (offset + 1) << sheetSpan;
-             // (This allows using frame-based anim tables for sheet sprites)
-             u16 sheetSpan:3;
-             //  u16 flags_4:1;             //0x10
-             //  u16 flags_5:1;             //0x20
-             //  u16 flags_6:1;             //0x40
-             u16 flags_7:1;                 //0x80
-    /*0x3F*/ u16 hFlip:1;                   //1
-             u16 vFlip:1;                   //2
-             u16 animBeginning:1;           //4
-             u16 affineAnimBeginning:1;     //8
-             u16 animEnded:1;               //0x10
-             u16 affineAnimEnded:1;         //0x20
-             u16 usingSheet:1;              //0x40
-             u16 anchored:1;                //0x80
+    /*0x3E*/ u16 inUse : 1;     // 1
+    u16 coordOffsetEnabled : 1; // 2
+    u16 invisible : 1;          // 4
+    u16 flags_3 : 1;            // 8
+    // if nonzero, tile offset for usingSheet sprites
+    // is (offset + 1) << sheetSpan;
+    // (This allows using frame-based anim tables for sheet sprites)
+    u16 sheetSpan : 3;
+    //  u16 flags_4:1;             //0x10
+    //  u16 flags_5:1;             //0x20
+    //  u16 flags_6:1;             //0x40
+    u16 flags_7 : 1;             // 0x80
+    /*0x3F*/ u16 hFlip : 1;      // 1
+    u16 vFlip : 1;               // 2
+    u16 animBeginning : 1;       // 4
+    u16 affineAnimBeginning : 1; // 8
+    u16 animEnded : 1;           // 0x10
+    u16 affineAnimEnded : 1;     // 0x20
+    u16 usingSheet : 1;          // 0x40
+    u16 anchored : 1;            // 0x80
 
     /*0x40*/ u16 sheetTileStart;
 
-    /*0x42*/ u8 subspriteTableNum:6;
-             u8 subspriteMode:2;
+    /*0x42*/ u8 subspriteTableNum : 6;
+    u8 subspriteMode : 2;
 
     /*0x43*/ u8 subpriority;
 };
@@ -325,4 +347,4 @@ u32 GetSpanPerImage(u32 shape, u32 size);
 void RequestSpriteFrameImageCopy(u16 index, u16 tileNum, const struct SpriteFrameImage *images);
 void SetSpriteOamFlipBits(struct Sprite *sprite, u8 hFlip, u8 vFlip);
 
-#endif //GUARD_SPRITE_H
+#endif // GUARD_SPRITE_H

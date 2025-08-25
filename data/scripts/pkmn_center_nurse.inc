@@ -4,16 +4,65 @@ Common_EventScript_PkmnCenterNurse::
 	setvar VAR_0x8004, 0
 	specialvar VAR_RESULT, CountPlayerTrainerStars
 	goto_if_eq VAR_RESULT, 4, EventScript_PkmnCenterNurse_GoldCard
-	msgbox gText_WouldYouLikeToRestYourPkmn, MSGBOX_YESNO
-	goto_if_eq VAR_RESULT, YES, EventScript_PkmnCenterNurse_HealPkmn
-	goto_if_eq VAR_RESULT, NO, EventScript_PkmnCenterNurse_Goodbye
-	end
+	msgbox gText_WouldYouLikeToRestYourPkmn, MSGBOX_DEFAULT
+	goto EventScript_PkmnCenterNurse_ShowMainMenu
 
 EventScript_PkmnCenterNurse_Goodbye::
 	message gText_WeHopeToSeeYouAgain
 	return
 
-@ VAR_0x8004 is 1 when player has Gold Card; jumps are identical
+EventScript_PkmnCenterNurse_ShowMainMenu::
+	multichoice 0, 0, MULTI_NURSE_SERVICES, FALSE
+	switch VAR_RESULT
+	case 0, EventScript_PkmnCenterNurse_HealPkmn
+	case 1, EventScript_PkmnCenterNurse_LevelUp
+	case 2, EventScript_PkmnCenterNurse_Goodbye
+	case MULTI_B_PRESSED, EventScript_PkmnCenterNurse_Goodbye
+	end
+
+EventScript_PkmnCenterNurse_LevelUp::
+	msgbox gText_LevelUpService, MSGBOX_DEFAULT
+	goto EventScript_PkmnCenterNurse_LevelUpLoop
+
+EventScript_PkmnCenterNurse_LevelUpLoop::
+	special ChoosePartyMon
+	waitstate
+	goto_if_eq VAR_0x8004, PARTY_NOTHING_CHOSEN, EventScript_PkmnCenterNurse_LevelUpCancel
+	goto_if_ge VAR_0x8004, PARTY_SIZE, EventScript_PkmnCenterNurse_LevelUpCancel
+	@ VAR_0x8004 now contains the party slot (0-5) of the chosen Pokemon
+	@ Store the selected party slot for later use
+	copyvar VAR_0x8005, VAR_0x8004
+	@ Show interactive money input interface
+	msgbox gText_HowMuchMoneyForExp, MSGBOX_DEFAULT
+	special MoneyInputForExp
+	waitstate
+	@ Check if player cancelled or entered 0
+	goto_if_eq VAR_RESULT, FALSE, EventScript_PkmnCenterNurse_LevelUpCancel
+	goto_if_eq VAR_0x8006, 0, EventScript_PkmnCenterNurse_LevelUpCancel
+	@ Process the purchase
+	goto EventScript_PkmnCenterNurse_ProcessExpPurchase
+
+EventScript_PkmnCenterNurse_ProcessExpPurchase::
+	@ Check money and give experience through special function
+	special GiveExpFromNurse
+	@ Check if the transaction was successful
+	goto_if_eq VAR_RESULT, FALSE, EventScript_PkmnCenterNurse_NotEnoughMoney
+	@ Show success message
+	bufferpartymonnick 0, VAR_0x8005
+	buffernumberstring 1, VAR_0x8006
+	msgbox gText_LevelUpAnotherPokemon, MSGBOX_YESNO
+	goto_if_eq VAR_RESULT, YES, EventScript_PkmnCenterNurse_LevelUpLoop
+	goto EventScript_PkmnCenterNurse_LevelUpCancel
+
+EventScript_PkmnCenterNurse_NotEnoughMoney::
+	msgbox gText_NotEnoughMoney, MSGBOX_DEFAULT
+	goto EventScript_PkmnCenterNurse_LevelUpLoop
+
+EventScript_PkmnCenterNurse_LevelUpCancel::
+	specialvar VAR_RESULT, CountPlayerTrainerStars
+	goto_if_eq VAR_RESULT, 4, EventScript_PkmnCenterNurse_ShowMainMenuGoldCard
+	goto EventScript_PkmnCenterNurse_ShowMainMenu
+
 EventScript_PkmnCenterNurse_HealPkmn::
 	incrementgamestat GAME_STAT_USED_POKECENTER
 	call_if_eq VAR_0x8004, 0, EventScript_PkmnCenterNurse_IllTakeYourPkmn
@@ -46,6 +95,7 @@ EventScript_PkmnCenterNurse_TakeAndHealPkmn::
 	applymovement VAR_0x800B, Common_Movement_WalkInPlaceFasterDown
 	waitmovement 0
 	special HealPlayerParty
+	special RefillPotionFlask
 	callnative UpdateFollowingPokemon
 	return
 
@@ -107,16 +157,21 @@ EventScript_PkmnCenterNurse_GoldCard::
 	waitmovement 0
 	applymovement VAR_0x800B, Common_Movement_Delay48
 	waitmovement 0
-	msgbox gText_NoticesGoldCard, MSGBOX_YESNO
-	goto_if_eq VAR_RESULT, YES, EventScript_PkmnCenterNurse_GoldCardHealPkmn
-	message gText_WeHopeToSeeYouAgain2
-	return
+	msgbox gText_NoticesGoldCard, MSGBOX_DEFAULT
+	goto EventScript_PkmnCenterNurse_ShowMainMenuGoldCard
+
+EventScript_PkmnCenterNurse_ShowMainMenuGoldCard::
+	multichoice 0, 0, MULTI_NURSE_SERVICES, FALSE
+	switch VAR_RESULT
+	case 0, EventScript_PkmnCenterNurse_GoldCardHealPkmn
+	case 1, EventScript_PkmnCenterNurse_LevelUp
+	case 2, EventScript_PkmnCenterNurse_Goodbye
+	case MULTI_B_PRESSED, EventScript_PkmnCenterNurse_Goodbye
+	end
 
 EventScript_PkmnCenterNurse_AskForUsual::
-	msgbox gText_YouWantTheUsual, MSGBOX_YESNO
-	goto_if_eq VAR_RESULT, YES, EventScript_PkmnCenterNurse_GoldCardHealPkmn
-	message gText_WeHopeToSeeYouAgain2
-	return
+	msgbox gText_YouWantTheUsual, MSGBOX_DEFAULT
+	goto EventScript_PkmnCenterNurse_ShowMainMenuGoldCard
 
 EventScript_PkmnCenterNurse_GoldCardHealPkmn::
 	setvar VAR_0x8004, 1

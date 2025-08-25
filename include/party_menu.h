@@ -10,14 +10,14 @@ struct PartyMenu
 {
     MainCallback exitCallback;
     TaskFunc task;
-    u8 menuType:4;
-    u8 layout:2;
+    u8 menuType : 4;
+    u8 layout : 2;
     s8 slotId;
     s8 slotId2;
     u8 action;
     u16 bagItem;
-    s16 data1;           // used variously as a move, counter, moveSlotId, cursorPos, or indicator that the menu is opened from the field
-    s16 learnMoveState;  // data2, used only as a learn move state
+    s16 data1;          // used variously as a move, counter, moveSlotId, cursorPos, or indicator that the menu is opened from the field
+    s16 learnMoveState; // data2, used only as a learn move state
 };
 
 #define DATA1_PARTY_MENU_FROM_FIELD -1
@@ -69,6 +69,7 @@ bool8 MonKnowsMove(struct Pokemon *mon, u16 move);
 bool8 BoxMonKnowsMove(struct BoxPokemon *boxMon, u16 move);
 void ItemUseCB_TMHM(u8 taskId, TaskFunc task);
 void ItemUseCB_RareCandy(u8 taskId, TaskFunc task);
+void ItemUseCB_NurseExp(u8 taskId, TaskFunc task);
 void ItemUseCB_DynamaxCandy(u8 taskId, TaskFunc task);
 void ItemUseCB_SacredAsh(u8 taskId, TaskFunc task);
 void ItemUseCB_EvolutionStone(u8 taskId, TaskFunc task);

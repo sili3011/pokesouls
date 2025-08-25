@@ -9,7 +9,12 @@
 #include "diploma.h"
 #include "event_data.h"
 #include "event_object_movement.h"
+#include "event_scripts.h"
 #include "fieldmap.h"
+#include "constants/vars.h"
+#include "constants/event_objects.h"
+#include "constants/trainer_types.h"
+#include "constants/items.h"
 #include "field_camera.h"
 #include "field_effect.h"
 #include "field_message_box.h"
@@ -19,19 +24,27 @@
 #include "field_weather.h"
 #include "graphics.h"
 #include "international_string_util.h"
+#include "item.h"
 #include "item_icon.h"
 #include "link.h"
 #include "load_save.h"
 #include "list_menu.h"
 #include "main.h"
+#include "money.h"
 #include "mystery_gift.h"
 #include "match_call.h"
 #include "menu.h"
+#include "menu_helpers.h"
+#include "menu_specialized.h"
 #include "overworld.h"
 #include "party_menu.h"
+#include "pokemon_summary_screen.h"
 #include "pokeblock.h"
 #include "pokedex.h"
 #include "pokemon.h"
+#include "pokemon_icon.h"
+#include "evolution_scene.h"
+#include "caps.h"
 #include "pokemon_storage_system.h"
 #include "random.h"
 #include "rayquaza_scene.h"
@@ -49,11 +62,15 @@
 #include "tv.h"
 #include "wallclock.h"
 #include "window.h"
+#include "bg.h"
+#include "gpu_regs.h"
+#include "constants/characters.h"
 #include "constants/battle_frontier.h"
 #include "constants/battle_pyramid.h"
 #include "constants/battle_tower.h"
 #include "constants/decorations.h"
 #include "constants/event_objects.h"
+#include "constants/characters.h"
 #include "constants/event_object_movement.h"
 #include "constants/field_effects.h"
 #include "constants/field_specials.h"
@@ -71,16 +88,18 @@
 #include "constants/rgb.h"
 #include "palette.h"
 #include "battle_util.h"
+#include "constants/pokemon.h"
 #include "naming_screen.h"
+#include "evolution_scene.h"
 
 #define TAG_ITEM_ICON 5500
 
 #define GFXTAG_MULTICHOICE_SCROLL_ARROWS 2000
 #define PALTAG_MULTICHOICE_SCROLL_ARROWS 100
 
-#define ELEVATOR_WINDOW_WIDTH  3
+#define ELEVATOR_WINDOW_WIDTH 3
 #define ELEVATOR_WINDOW_HEIGHT 3
-#define ELEVATOR_LIGHT_STAGES  3
+#define ELEVATOR_LIGHT_STAGES 3
 
 EWRAM_DATA bool8 gBikeCyclingChallenge = FALSE;
 EWRAM_DATA u8 gBikeCollisions = 0;
@@ -148,7 +167,7 @@ static u16 PlayerGainRandomTrainerFan(void);
 static void BufferFanClubTrainerName_(struct LinkBattleRecords *, u8, u8);
 #else
 static void BufferFanClubTrainerName_(u8 whichLinkTrainer, u8 whichNPCTrainer);
-#endif //FREE_LINK_BATTLE_RECORDS
+#endif // FREE_LINK_BATTLE_RECORDS
 
 static const u8 sText_BigGuy[] = _("Big guy");
 static const u8 sText_BigGirl[] = _("Big girl");
@@ -522,14 +541,12 @@ void SpawnLinkPartnerObjectEvent(void)
         MOVEMENT_TYPE_FACE_UP,
         MOVEMENT_TYPE_FACE_LEFT,
         MOVEMENT_TYPE_FACE_DOWN,
-        MOVEMENT_TYPE_FACE_RIGHT
-    };
+        MOVEMENT_TYPE_FACE_RIGHT};
     s8 coordOffsets[][2] = {
-        { 0,  1},
-        { 1,  0},
-        { 0, -1},
-        {-1,  0}
-    };
+        {0, 1},
+        {1, 0},
+        {0, -1},
+        {-1, 0}};
     u8 myLinkPlayerNumber;
     u8 playerFacingDirection;
     u8 linkSpriteId;
@@ -630,12 +647,11 @@ static void LoadLinkPartnerObjectEventSpritePalette(u16 graphicsId, u8 localEven
 }
 
 static const struct UCoords8 sMauvilleGymSwitchCoords[] =
-{
-    { 0 + MAP_OFFSET, 15 + MAP_OFFSET},
-    { 4 + MAP_OFFSET, 12 + MAP_OFFSET},
-    { 3 + MAP_OFFSET,  9 + MAP_OFFSET},
-    { 8 + MAP_OFFSET,  9 + MAP_OFFSET}
-};
+    {
+        {0 + MAP_OFFSET, 15 + MAP_OFFSET},
+        {4 + MAP_OFFSET, 12 + MAP_OFFSET},
+        {3 + MAP_OFFSET, 9 + MAP_OFFSET},
+        {8 + MAP_OFFSET, 9 + MAP_OFFSET}};
 
 // Presses the stepped-on switch and raises the rest
 void MauvilleGymPressSwitch(void)
@@ -989,11 +1005,7 @@ static bool32 IsBuildingPCTile(u32 tileId)
 
 static bool32 IsPlayerHousePCTile(u32 tileId)
 {
-    return gMapHeader.mapLayout->secondaryTileset == &gTileset_BrendansMaysHouse
-        && (tileId == METATILE_BrendansMaysHouse_BrendanPC_On
-            || tileId == METATILE_BrendansMaysHouse_BrendanPC_Off
-            || tileId == METATILE_BrendansMaysHouse_MayPC_On
-            || tileId == METATILE_BrendansMaysHouse_MayPC_Off);
+    return gMapHeader.mapLayout->secondaryTileset == &gTileset_BrendansMaysHouse && (tileId == METATILE_BrendansMaysHouse_BrendanPC_On || tileId == METATILE_BrendansMaysHouse_BrendanPC_Off || tileId == METATILE_BrendansMaysHouse_MayPC_On || tileId == METATILE_BrendansMaysHouse_MayPC_Off);
 }
 
 static bool8 IsPlayerInFrontOfPC(void)
@@ -1008,11 +1020,11 @@ static bool8 IsPlayerInFrontOfPC(void)
 }
 
 // Task data for Task_PCTurnOnEffect and Task_LotteryCornerComputerEffect
-#define tPaused       data[0] // Never set
-#define tTaskId       data[1]
+#define tPaused data[0] // Never set
+#define tTaskId data[1]
 #define tFlickerCount data[2]
-#define tTimer        data[3]
-#define tIsScreenOn   data[4]
+#define tTimer data[3]
+#define tIsScreenOn data[4]
 
 // For this special, gSpecialVar_0x8004 is expected to be some PC_LOCATION_* value.
 void DoPCTurnOnEffect(void)
@@ -1336,8 +1348,7 @@ u16 GetSlotMachineId(void)
         SLOT_MACHINE_LUCKY,
         SLOT_MACHINE_LUCKIER,
         SLOT_MACHINE_LUCKIER,
-        SLOT_MACHINE_LUCKIEST
-    };
+        SLOT_MACHINE_LUCKIEST};
     static const u8 sSlotMachineServiceDayIds[SLOT_MACHINE_COUNT] = {
         SLOT_MACHINE_LUCKY,
         SLOT_MACHINE_LUCKY,
@@ -1350,8 +1361,7 @@ u16 GetSlotMachineId(void)
         SLOT_MACHINE_LUCKIER,
         SLOT_MACHINE_LUCKIER,
         SLOT_MACHINE_LUCKIEST,
-        SLOT_MACHINE_LUCKIEST
-    };
+        SLOT_MACHINE_LUCKIEST};
 
     u32 rnd = gSaveBlock1Ptr->dewfordTrends[0].trendiness + gSaveBlock1Ptr->dewfordTrends[0].rand + sSlotMachineRandomSeeds[gSpecialVar_0x8004];
     if (IsPokeNewsActive(POKENEWS_GAME_CORNER))
@@ -1432,9 +1442,7 @@ bool8 Special_AreLeadMonEVsMaxedOut(void)
 
 u8 TryUpdateRusturfTunnelState(void)
 {
-    if (!FlagGet(FLAG_RUSTURF_TUNNEL_OPENED)
-        && gSaveBlock1Ptr->location.mapGroup == MAP_GROUP(MAP_RUSTURF_TUNNEL)
-        && gSaveBlock1Ptr->location.mapNum == MAP_NUM(MAP_RUSTURF_TUNNEL))
+    if (!FlagGet(FLAG_RUSTURF_TUNNEL_OPENED) && gSaveBlock1Ptr->location.mapGroup == MAP_GROUP(MAP_RUSTURF_TUNNEL) && gSaveBlock1Ptr->location.mapNum == MAP_NUM(MAP_RUSTURF_TUNNEL))
     {
         if (FlagGet(FLAG_HIDE_RUSTURF_TUNNEL_ROCK_1))
         {
@@ -1496,11 +1504,11 @@ bool8 IsPokerusInParty(void)
 }
 
 // Task data for Task_ShakeCamera
-#define tHorizontalPan  data[0]
-#define tDelayCounter   data[1]
-#define tNumShakes      data[2]
-#define tDelay          data[3]
-#define tVerticalPan    data[4]
+#define tHorizontalPan data[0]
+#define tDelayCounter data[1]
+#define tNumShakes data[2]
+#define tDelay data[3]
+#define tVerticalPan data[4]
 
 void ShakeCamera(void)
 {
@@ -1569,8 +1577,7 @@ u8 GetLeadMonIndex(void)
     u8 partyCount = CalculatePlayerPartyCount();
     for (i = 0; i < partyCount; i++)
     {
-        if (GetMonData(&gPlayerParty[i], MON_DATA_SPECIES_OR_EGG, NULL) != SPECIES_EGG
-         && GetMonData(&gPlayerParty[i], MON_DATA_SPECIES_OR_EGG, NULL) != SPECIES_NONE)
+        if (GetMonData(&gPlayerParty[i], MON_DATA_SPECIES_OR_EGG, NULL) != SPECIES_EGG && GetMonData(&gPlayerParty[i], MON_DATA_SPECIES_OR_EGG, NULL) != SPECIES_NONE)
             return i;
     }
     return 0;
@@ -1584,7 +1591,7 @@ u16 ScriptGetPartyMonSpecies(void)
 // Removed for Emerald
 void TryInitBattleTowerAwardManObjectEvent(void)
 {
-    //TryInitLocalObjectEvent(6);
+    // TryInitLocalObjectEvent(6);
 }
 
 u16 GetDaysUntilPacifidlogTMAvailable(void)
@@ -1697,8 +1704,7 @@ bool8 IsBadEggInParty(void)
 
 bool8 InMultiPartnerRoom(void)
 {
-    if (gSaveBlock1Ptr->location.mapGroup == MAP_GROUP(MAP_BATTLE_FRONTIER_BATTLE_TOWER_MULTI_PARTNER_ROOM)
-        && gSaveBlock1Ptr->location.mapNum == MAP_NUM(MAP_BATTLE_FRONTIER_BATTLE_TOWER_MULTI_PARTNER_ROOM) &&
+    if (gSaveBlock1Ptr->location.mapGroup == MAP_GROUP(MAP_BATTLE_FRONTIER_BATTLE_TOWER_MULTI_PARTNER_ROOM) && gSaveBlock1Ptr->location.mapNum == MAP_NUM(MAP_BATTLE_FRONTIER_BATTLE_TOWER_MULTI_PARTNER_ROOM) &&
         VarGet(VAR_FRONTIER_BATTLE_MODE) == FRONTIER_MODE_MULTIS)
         return TRUE;
     return FALSE;
@@ -1711,72 +1717,59 @@ void OffsetCameraForBattle(void)
 }
 
 static const struct WindowTemplate sWindowTemplate_ElevatorFloor =
-{
-    .bg = 0,
-    .tilemapLeft = 21,
-    .tilemapTop = 1,
-    .width = 8,
-    .height = 4,
-    .paletteNum = 15,
-    .baseBlock = 8,
+    {
+        .bg = 0,
+        .tilemapLeft = 21,
+        .tilemapTop = 1,
+        .width = 8,
+        .height = 4,
+        .paletteNum = 15,
+        .baseBlock = 8,
 };
 
 static const u8 *const sDeptStoreFloorNames[] =
-{
-    [DEPT_STORE_FLOORNUM_B4F] = gText_B4F,
-    [DEPT_STORE_FLOORNUM_B3F] = gText_B3F,
-    [DEPT_STORE_FLOORNUM_B2F] = gText_B2F,
-    [DEPT_STORE_FLOORNUM_B1F] = gText_B1F,
-    [DEPT_STORE_FLOORNUM_1F] = gText_1F,
-    [DEPT_STORE_FLOORNUM_2F] = gText_2F,
-    [DEPT_STORE_FLOORNUM_3F] = gText_3F,
-    [DEPT_STORE_FLOORNUM_4F] = gText_4F,
-    [DEPT_STORE_FLOORNUM_5F] = gText_5F,
-    [DEPT_STORE_FLOORNUM_6F] = gText_6F,
-    [DEPT_STORE_FLOORNUM_7F] = gText_7F,
-    [DEPT_STORE_FLOORNUM_8F] = gText_8F,
-    [DEPT_STORE_FLOORNUM_9F] = gText_9F,
-    [DEPT_STORE_FLOORNUM_10F] = gText_10F,
-    [DEPT_STORE_FLOORNUM_11F] = gText_11F,
-    [DEPT_STORE_FLOORNUM_ROOFTOP] = gText_Rooftop
-};
+    {
+        [DEPT_STORE_FLOORNUM_B4F] = gText_B4F,
+        [DEPT_STORE_FLOORNUM_B3F] = gText_B3F,
+        [DEPT_STORE_FLOORNUM_B2F] = gText_B2F,
+        [DEPT_STORE_FLOORNUM_B1F] = gText_B1F,
+        [DEPT_STORE_FLOORNUM_1F] = gText_1F,
+        [DEPT_STORE_FLOORNUM_2F] = gText_2F,
+        [DEPT_STORE_FLOORNUM_3F] = gText_3F,
+        [DEPT_STORE_FLOORNUM_4F] = gText_4F,
+        [DEPT_STORE_FLOORNUM_5F] = gText_5F,
+        [DEPT_STORE_FLOORNUM_6F] = gText_6F,
+        [DEPT_STORE_FLOORNUM_7F] = gText_7F,
+        [DEPT_STORE_FLOORNUM_8F] = gText_8F,
+        [DEPT_STORE_FLOORNUM_9F] = gText_9F,
+        [DEPT_STORE_FLOORNUM_10F] = gText_10F,
+        [DEPT_STORE_FLOORNUM_11F] = gText_11F,
+        [DEPT_STORE_FLOORNUM_ROOFTOP] = gText_Rooftop};
 
 static const u16 sElevatorWindowTiles_Ascending[ELEVATOR_WINDOW_HEIGHT][ELEVATOR_LIGHT_STAGES] =
-{
     {
-        METATILE_BattleFrontier_Elevator_Top0,
-        METATILE_BattleFrontier_Elevator_Top1,
-        METATILE_BattleFrontier_Elevator_Top2
-    },
-    {
-        METATILE_BattleFrontier_Elevator_Mid0,
-        METATILE_BattleFrontier_Elevator_Mid1,
-        METATILE_BattleFrontier_Elevator_Mid2
-    },
-    {
-        METATILE_BattleFrontier_Elevator_Bottom0,
-        METATILE_BattleFrontier_Elevator_Bottom1,
-        METATILE_BattleFrontier_Elevator_Bottom2
-    },
+        {METATILE_BattleFrontier_Elevator_Top0,
+         METATILE_BattleFrontier_Elevator_Top1,
+         METATILE_BattleFrontier_Elevator_Top2},
+        {METATILE_BattleFrontier_Elevator_Mid0,
+         METATILE_BattleFrontier_Elevator_Mid1,
+         METATILE_BattleFrontier_Elevator_Mid2},
+        {METATILE_BattleFrontier_Elevator_Bottom0,
+         METATILE_BattleFrontier_Elevator_Bottom1,
+         METATILE_BattleFrontier_Elevator_Bottom2},
 };
 
 static const u16 sElevatorWindowTiles_Descending[ELEVATOR_WINDOW_HEIGHT][ELEVATOR_LIGHT_STAGES] =
-{
     {
-        METATILE_BattleFrontier_Elevator_Top0,
-        METATILE_BattleFrontier_Elevator_Top2,
-        METATILE_BattleFrontier_Elevator_Top1
-    },
-    {
-        METATILE_BattleFrontier_Elevator_Mid0,
-        METATILE_BattleFrontier_Elevator_Mid2,
-        METATILE_BattleFrontier_Elevator_Mid1
-    },
-    {
-        METATILE_BattleFrontier_Elevator_Bottom0,
-        METATILE_BattleFrontier_Elevator_Bottom2,
-        METATILE_BattleFrontier_Elevator_Bottom1
-    },
+        {METATILE_BattleFrontier_Elevator_Top0,
+         METATILE_BattleFrontier_Elevator_Top2,
+         METATILE_BattleFrontier_Elevator_Top1},
+        {METATILE_BattleFrontier_Elevator_Mid0,
+         METATILE_BattleFrontier_Elevator_Mid2,
+         METATILE_BattleFrontier_Elevator_Mid1},
+        {METATILE_BattleFrontier_Elevator_Bottom0,
+         METATILE_BattleFrontier_Elevator_Bottom2,
+         METATILE_BattleFrontier_Elevator_Bottom1},
 };
 
 void SetDeptStoreFloor(void)
@@ -1845,11 +1838,11 @@ u16 GetDeptStoreDefaultFloorChoice(void)
 }
 
 // Task data for Task_MoveElevator
-#define tTimer       data[1]
+#define tTimer data[1]
 #define tMoveCounter data[2]
 #define tVerticalPan data[4]
-#define tTotalMoves  data[5]
-#define tDescending  data[6]
+#define tTotalMoves data[5]
+#define tDescending data[6]
 
 // The maximum considered difference between floors.
 // Elevator trips with a larger difference are treated the same
@@ -1860,7 +1853,7 @@ u16 GetDeptStoreDefaultFloorChoice(void)
 // gSpecialVar_0x8006 is expected to be the destination floor number.
 void MoveElevator(void)
 {
-    static const u8 sElevatorTripLength[MAX_ELEVATOR_TRIP] = { 8, 16, 24, 32, 38, 46, 52, 56, 57 };
+    static const u8 sElevatorTripLength[MAX_ELEVATOR_TRIP] = {8, 16, 24, 32, 38, 46, 52, 56, 57};
 
     s16 *data = gTasks[CreateTask(Task_MoveElevator, 9)].data;
     u16 floorDelta;
@@ -1943,13 +1936,13 @@ void CloseDeptStoreElevatorWindow(void)
 
 // Task data for Task_MoveElevatorWindowLights
 #define tMoveCounter data[0]
-#define tTimer       data[1]
-#define tDescending  data[2]
-#define tTotalMoves  data[3]
+#define tTimer data[1]
+#define tDescending data[2]
+#define tTotalMoves data[3]
 
 static void MoveElevatorWindowLights(u16 floorDelta, bool8 descending)
 {
-    static const u8 sElevatorLightCycles[MAX_ELEVATOR_TRIP] = { 3, 6, 9, 12, 15, 18, 21, 24, 27 };
+    static const u8 sElevatorLightCycles[MAX_ELEVATOR_TRIP] = {3, 6, 9, 12, 15, 18, 21, 24, 27};
 
     if (FuncIsActiveTask(Task_MoveElevatorWindowLights) != TRUE)
     {
@@ -2043,27 +2036,26 @@ void BufferVarsForIVRater(void)
 bool8 UsedPokemonCenterWarp(void)
 {
     static const u16 sPokemonCenters[] =
-    {
-        MAP_OLDALE_TOWN_POKEMON_CENTER_1F,
-        MAP_DEWFORD_TOWN_POKEMON_CENTER_1F,
-        MAP_LAVARIDGE_TOWN_POKEMON_CENTER_1F,
-        MAP_FALLARBOR_TOWN_POKEMON_CENTER_1F,
-        MAP_VERDANTURF_TOWN_POKEMON_CENTER_1F,
-        MAP_PACIFIDLOG_TOWN_POKEMON_CENTER_1F,
-        MAP_PETALBURG_CITY_POKEMON_CENTER_1F,
-        MAP_SLATEPORT_CITY_POKEMON_CENTER_1F,
-        MAP_MAUVILLE_CITY_POKEMON_CENTER_1F,
-        MAP_RUSTBORO_CITY_POKEMON_CENTER_1F,
-        MAP_FORTREE_CITY_POKEMON_CENTER_1F,
-        MAP_LILYCOVE_CITY_POKEMON_CENTER_1F,
-        MAP_MOSSDEEP_CITY_POKEMON_CENTER_1F,
-        MAP_SOOTOPOLIS_CITY_POKEMON_CENTER_1F,
-        MAP_EVER_GRANDE_CITY_POKEMON_CENTER_1F,
-        MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F,
-        MAP_BATTLE_FRONTIER_POKEMON_CENTER_1F,
-        MAP_UNION_ROOM,
-        MAP_UNDEFINED
-    };
+        {
+            MAP_OLDALE_TOWN_POKEMON_CENTER_1F,
+            MAP_DEWFORD_TOWN_POKEMON_CENTER_1F,
+            MAP_LAVARIDGE_TOWN_POKEMON_CENTER_1F,
+            MAP_FALLARBOR_TOWN_POKEMON_CENTER_1F,
+            MAP_VERDANTURF_TOWN_POKEMON_CENTER_1F,
+            MAP_PACIFIDLOG_TOWN_POKEMON_CENTER_1F,
+            MAP_PETALBURG_CITY_POKEMON_CENTER_1F,
+            MAP_SLATEPORT_CITY_POKEMON_CENTER_1F,
+            MAP_MAUVILLE_CITY_POKEMON_CENTER_1F,
+            MAP_RUSTBORO_CITY_POKEMON_CENTER_1F,
+            MAP_FORTREE_CITY_POKEMON_CENTER_1F,
+            MAP_LILYCOVE_CITY_POKEMON_CENTER_1F,
+            MAP_MOSSDEEP_CITY_POKEMON_CENTER_1F,
+            MAP_SOOTOPOLIS_CITY_POKEMON_CENTER_1F,
+            MAP_EVER_GRANDE_CITY_POKEMON_CENTER_1F,
+            MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F,
+            MAP_BATTLE_FRONTIER_POKEMON_CENTER_1F,
+            MAP_UNION_ROOM,
+            MAP_UNDEFINED};
 
     int i;
     u16 map = (gLastUsedWarp.mapGroup << 8) + gLastUsedWarp.mapNum;
@@ -2095,82 +2087,71 @@ void UpdateFrontierManiac(u16 daysSince)
 void ShowFrontierManiacMessage(void)
 {
     static const u8 *const sFrontierManiacMessages[][FRONTIER_MANIAC_MESSAGE_COUNT] =
-    {
-        [FRONTIER_MANIAC_TOWER_SINGLES] =
         {
-            BattleFrontier_Lounge2_Text_SalonMaidenIsThere,
-            BattleFrontier_Lounge2_Text_SalonMaidenSilverMons,
-            BattleFrontier_Lounge2_Text_SalonMaidenGoldMons
-        },
-        [FRONTIER_MANIAC_TOWER_DOUBLES] =
-        {
-            BattleFrontier_Lounge2_Text_DoubleBattleAdvice1,
-            BattleFrontier_Lounge2_Text_DoubleBattleAdvice2,
-            BattleFrontier_Lounge2_Text_DoubleBattleAdvice3
-        },
-        [FRONTIER_MANIAC_TOWER_MULTIS] =
-        {
-            BattleFrontier_Lounge2_Text_MultiBattleAdvice,
-            BattleFrontier_Lounge2_Text_MultiBattleAdvice,
-            BattleFrontier_Lounge2_Text_MultiBattleAdvice
-        },
-        [FRONTIER_MANIAC_TOWER_LINK] =
-        {
-            BattleFrontier_Lounge2_Text_LinkMultiBattleAdvice,
-            BattleFrontier_Lounge2_Text_LinkMultiBattleAdvice,
-            BattleFrontier_Lounge2_Text_LinkMultiBattleAdvice
-        },
-        [FRONTIER_MANIAC_DOME] =
-        {
-            BattleFrontier_Lounge2_Text_DomeAceIsThere,
-            BattleFrontier_Lounge2_Text_DomeAceSilverMons,
-            BattleFrontier_Lounge2_Text_DomeAceGoldMons
-        },
-        [FRONTIER_MANIAC_FACTORY] =
-        {
-            BattleFrontier_Lounge2_Text_FactoryHeadIsThere,
-            BattleFrontier_Lounge2_Text_FactoryHeadSilverMons,
-            BattleFrontier_Lounge2_Text_FactoryHeadGoldMons
-        },
-        [FRONTIER_MANIAC_PALACE] =
-        {
-            BattleFrontier_Lounge2_Text_PalaceMavenIsThere,
-            BattleFrontier_Lounge2_Text_PalaceMavenSilverMons,
-            BattleFrontier_Lounge2_Text_PalaceMavenGoldMons
-        },
-        [FRONTIER_MANIAC_ARENA] =
-        {
-            BattleFrontier_Lounge2_Text_ArenaTycoonIsThere,
-            BattleFrontier_Lounge2_Text_ArenaTycoonSilverMons,
-            BattleFrontier_Lounge2_Text_ArenaTycoonGoldMons
-        },
-        [FRONTIER_MANIAC_PIKE] =
-        {
-            BattleFrontier_Lounge2_Text_PikeQueenIsThere,
-            BattleFrontier_Lounge2_Text_PikeQueenSilverMons,
-            BattleFrontier_Lounge2_Text_PikeQueenGoldMons
-        },
-        [FRONTIER_MANIAC_PYRAMID] =
-        {
-            BattleFrontier_Lounge2_Text_PyramidKingIsThere,
-            BattleFrontier_Lounge2_Text_PyramidKingSilverMons,
-            BattleFrontier_Lounge2_Text_PyramidKingGoldMons
-        },
-    };
+            [FRONTIER_MANIAC_TOWER_SINGLES] =
+                {
+                    BattleFrontier_Lounge2_Text_SalonMaidenIsThere,
+                    BattleFrontier_Lounge2_Text_SalonMaidenSilverMons,
+                    BattleFrontier_Lounge2_Text_SalonMaidenGoldMons},
+            [FRONTIER_MANIAC_TOWER_DOUBLES] =
+                {
+                    BattleFrontier_Lounge2_Text_DoubleBattleAdvice1,
+                    BattleFrontier_Lounge2_Text_DoubleBattleAdvice2,
+                    BattleFrontier_Lounge2_Text_DoubleBattleAdvice3},
+            [FRONTIER_MANIAC_TOWER_MULTIS] =
+                {
+                    BattleFrontier_Lounge2_Text_MultiBattleAdvice,
+                    BattleFrontier_Lounge2_Text_MultiBattleAdvice,
+                    BattleFrontier_Lounge2_Text_MultiBattleAdvice},
+            [FRONTIER_MANIAC_TOWER_LINK] =
+                {
+                    BattleFrontier_Lounge2_Text_LinkMultiBattleAdvice,
+                    BattleFrontier_Lounge2_Text_LinkMultiBattleAdvice,
+                    BattleFrontier_Lounge2_Text_LinkMultiBattleAdvice},
+            [FRONTIER_MANIAC_DOME] =
+                {
+                    BattleFrontier_Lounge2_Text_DomeAceIsThere,
+                    BattleFrontier_Lounge2_Text_DomeAceSilverMons,
+                    BattleFrontier_Lounge2_Text_DomeAceGoldMons},
+            [FRONTIER_MANIAC_FACTORY] =
+                {
+                    BattleFrontier_Lounge2_Text_FactoryHeadIsThere,
+                    BattleFrontier_Lounge2_Text_FactoryHeadSilverMons,
+                    BattleFrontier_Lounge2_Text_FactoryHeadGoldMons},
+            [FRONTIER_MANIAC_PALACE] =
+                {
+                    BattleFrontier_Lounge2_Text_PalaceMavenIsThere,
+                    BattleFrontier_Lounge2_Text_PalaceMavenSilverMons,
+                    BattleFrontier_Lounge2_Text_PalaceMavenGoldMons},
+            [FRONTIER_MANIAC_ARENA] =
+                {
+                    BattleFrontier_Lounge2_Text_ArenaTycoonIsThere,
+                    BattleFrontier_Lounge2_Text_ArenaTycoonSilverMons,
+                    BattleFrontier_Lounge2_Text_ArenaTycoonGoldMons},
+            [FRONTIER_MANIAC_PIKE] =
+                {
+                    BattleFrontier_Lounge2_Text_PikeQueenIsThere,
+                    BattleFrontier_Lounge2_Text_PikeQueenSilverMons,
+                    BattleFrontier_Lounge2_Text_PikeQueenGoldMons},
+            [FRONTIER_MANIAC_PYRAMID] =
+                {
+                    BattleFrontier_Lounge2_Text_PyramidKingIsThere,
+                    BattleFrontier_Lounge2_Text_PyramidKingSilverMons,
+                    BattleFrontier_Lounge2_Text_PyramidKingGoldMons},
+        };
 
     static const u8 sFrontierManiacStreakThresholds[][FRONTIER_MANIAC_MESSAGE_COUNT - 1] =
-    {
-        [FRONTIER_MANIAC_TOWER_SINGLES] = { 21, 56 },
-        [FRONTIER_MANIAC_TOWER_DOUBLES] = { 21, 35 },
-        [FRONTIER_MANIAC_TOWER_MULTIS]  = { 255, 255 },
-        [FRONTIER_MANIAC_TOWER_LINK]    = { 255, 255 },
-        [FRONTIER_MANIAC_DOME]          = { 2, 4 },
-        [FRONTIER_MANIAC_FACTORY]       = { 7, 21 },
-        [FRONTIER_MANIAC_PALACE]        = { 7, 21 },
-        [FRONTIER_MANIAC_ARENA]         = { 14, 28 },
-        [FRONTIER_MANIAC_PIKE]          = { 13, 112 }, //BUG: 112 (0x70) is probably a mistake; the Pike Queen is battled twice well before that
-        [FRONTIER_MANIAC_PYRAMID]       = { 7, 56 }
-    };
+        {
+            [FRONTIER_MANIAC_TOWER_SINGLES] = {21, 56},
+            [FRONTIER_MANIAC_TOWER_DOUBLES] = {21, 35},
+            [FRONTIER_MANIAC_TOWER_MULTIS] = {255, 255},
+            [FRONTIER_MANIAC_TOWER_LINK] = {255, 255},
+            [FRONTIER_MANIAC_DOME] = {2, 4},
+            [FRONTIER_MANIAC_FACTORY] = {7, 21},
+            [FRONTIER_MANIAC_PALACE] = {7, 21},
+            [FRONTIER_MANIAC_ARENA] = {14, 28},
+            [FRONTIER_MANIAC_PIKE] = {13, 112}, // BUG: 112 (0x70) is probably a mistake; the Pike Queen is battled twice well before that
+            [FRONTIER_MANIAC_PYRAMID] = {7, 56}};
 
     u8 i;
     u16 winStreak = 0;
@@ -2182,50 +2163,43 @@ void ShowFrontierManiacMessage(void)
     case FRONTIER_MANIAC_TOWER_DOUBLES:
     case FRONTIER_MANIAC_TOWER_MULTIS:
     case FRONTIER_MANIAC_TOWER_LINK:
-        if (gSaveBlock2Ptr->frontier.towerWinStreaks[facility][FRONTIER_LVL_50]
-            >= gSaveBlock2Ptr->frontier.towerWinStreaks[facility][FRONTIER_LVL_OPEN])
+        if (gSaveBlock2Ptr->frontier.towerWinStreaks[facility][FRONTIER_LVL_50] >= gSaveBlock2Ptr->frontier.towerWinStreaks[facility][FRONTIER_LVL_OPEN])
             winStreak = gSaveBlock2Ptr->frontier.towerWinStreaks[facility][FRONTIER_LVL_50];
         else
             winStreak = gSaveBlock2Ptr->frontier.towerWinStreaks[facility][FRONTIER_LVL_OPEN];
         break;
     case FRONTIER_MANIAC_DOME:
-        if (gSaveBlock2Ptr->frontier.domeWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_50]
-            >= gSaveBlock2Ptr->frontier.domeWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_OPEN])
+        if (gSaveBlock2Ptr->frontier.domeWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_50] >= gSaveBlock2Ptr->frontier.domeWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_OPEN])
             winStreak = gSaveBlock2Ptr->frontier.domeWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_50];
         else
             winStreak = gSaveBlock2Ptr->frontier.domeWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_OPEN];
         break;
     case FRONTIER_MANIAC_FACTORY:
-        if (gSaveBlock2Ptr->frontier.factoryWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_50]
-            >= gSaveBlock2Ptr->frontier.factoryWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_OPEN])
+        if (gSaveBlock2Ptr->frontier.factoryWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_50] >= gSaveBlock2Ptr->frontier.factoryWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_OPEN])
             winStreak = gSaveBlock2Ptr->frontier.factoryWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_50];
         else
             winStreak = gSaveBlock2Ptr->frontier.factoryWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_OPEN];
         break;
     case FRONTIER_MANIAC_PALACE:
-        if (gSaveBlock2Ptr->frontier.palaceWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_50]
-            >= gSaveBlock2Ptr->frontier.palaceWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_OPEN])
+        if (gSaveBlock2Ptr->frontier.palaceWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_50] >= gSaveBlock2Ptr->frontier.palaceWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_OPEN])
             winStreak = gSaveBlock2Ptr->frontier.palaceWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_50];
         else
             winStreak = gSaveBlock2Ptr->frontier.palaceWinStreaks[FRONTIER_MODE_SINGLES][FRONTIER_LVL_OPEN];
         break;
     case FRONTIER_MANIAC_ARENA:
-        if (gSaveBlock2Ptr->frontier.arenaWinStreaks[FRONTIER_LVL_50]
-            >= gSaveBlock2Ptr->frontier.arenaWinStreaks[FRONTIER_LVL_OPEN])
+        if (gSaveBlock2Ptr->frontier.arenaWinStreaks[FRONTIER_LVL_50] >= gSaveBlock2Ptr->frontier.arenaWinStreaks[FRONTIER_LVL_OPEN])
             winStreak = gSaveBlock2Ptr->frontier.arenaWinStreaks[FRONTIER_LVL_50];
         else
             winStreak = gSaveBlock2Ptr->frontier.arenaWinStreaks[FRONTIER_LVL_OPEN];
         break;
     case FRONTIER_MANIAC_PIKE:
-        if (gSaveBlock2Ptr->frontier.pikeWinStreaks[FRONTIER_LVL_50]
-            >= gSaveBlock2Ptr->frontier.pikeWinStreaks[FRONTIER_LVL_OPEN])
+        if (gSaveBlock2Ptr->frontier.pikeWinStreaks[FRONTIER_LVL_50] >= gSaveBlock2Ptr->frontier.pikeWinStreaks[FRONTIER_LVL_OPEN])
             winStreak = gSaveBlock2Ptr->frontier.pikeWinStreaks[FRONTIER_LVL_50];
         else
             winStreak = gSaveBlock2Ptr->frontier.pikeWinStreaks[FRONTIER_LVL_OPEN];
         break;
     case FRONTIER_MANIAC_PYRAMID:
-        if (gSaveBlock2Ptr->frontier.pyramidWinStreaks[FRONTIER_LVL_50]
-            >= gSaveBlock2Ptr->frontier.pyramidWinStreaks[FRONTIER_LVL_OPEN])
+        if (gSaveBlock2Ptr->frontier.pyramidWinStreaks[FRONTIER_LVL_50] >= gSaveBlock2Ptr->frontier.pyramidWinStreaks[FRONTIER_LVL_OPEN])
             winStreak = gSaveBlock2Ptr->frontier.pyramidWinStreaks[FRONTIER_LVL_50];
         else
             winStreak = gSaveBlock2Ptr->frontier.pyramidWinStreaks[FRONTIER_LVL_OPEN];
@@ -2234,7 +2208,8 @@ void ShowFrontierManiacMessage(void)
         return;
     }
 
-    for (i = 0; i < FRONTIER_MANIAC_MESSAGE_COUNT - 1 && sFrontierManiacStreakThresholds[facility][i] < winStreak; i++);
+    for (i = 0; i < FRONTIER_MANIAC_MESSAGE_COUNT - 1 && sFrontierManiacStreakThresholds[facility][i] < winStreak; i++)
+        ;
 
     ShowFieldMessage(sFrontierManiacMessages[facility][i]);
 }
@@ -2243,8 +2218,7 @@ void ShowFrontierManiacMessage(void)
 void BufferBattleTowerElevatorFloors(void)
 {
     static const u16 sBattleTowerStreakThresholds[] = {
-        7, 14, 21, 28, 35, 49, 63, 77, 91, 0
-    };
+        7, 14, 21, 28, 35, 49, 63, 77, 91, 0};
 
     u8 i;
     u16 battleMode = VarGet(VAR_FRONTIER_BATTLE_MODE);
@@ -2272,20 +2246,20 @@ void BufferBattleTowerElevatorFloors(void)
 }
 
 // Scrollable Multichoice task data defines
-#define tMaxItemsOnScreen    data[0]
-#define tNumItems            data[1]
-#define tLeft                data[2]
-#define tTop                 data[3]
-#define tWidth               data[4]
-#define tHeight              data[5]
+#define tMaxItemsOnScreen data[0]
+#define tNumItems data[1]
+#define tLeft data[2]
+#define tTop data[3]
+#define tWidth data[4]
+#define tHeight data[5]
 #define tKeepOpenAfterSelect data[6]
-#define tScrollOffset        data[7]
-#define tSelectedRow         data[8]
-#define tScrollMultiId       data[11]
-#define tScrollArrowId       data[12]
-#define tWindowId            data[13]
-#define tListTaskId          data[14]
-#define tTaskId              data[15]
+#define tScrollOffset data[7]
+#define tSelectedRow data[8]
+#define tScrollMultiId data[11]
+#define tScrollArrowId data[12]
+#define tWindowId data[13]
+#define tListTaskId data[14]
+#define tTaskId data[15]
 // data[9] and [10] unused
 
 void ShowScrollableMultichoice(void)
@@ -2425,160 +2399,146 @@ void ShowScrollableMultichoice(void)
 }
 
 static const u8 *const sScrollableMultichoiceOptions[][MAX_SCROLL_MULTI_LENGTH] =
-{
-    [SCROLL_MULTI_NONE] =
     {
-        gText_Exit
-    },
-    [SCROLL_MULTI_GLASS_WORKSHOP_VENDOR] =
-    {
-        COMPOUND_STRING("BLUE FLUTE"),
-        COMPOUND_STRING("YELLOW FLUTE"),
-        COMPOUND_STRING("RED FLUTE"),
-        COMPOUND_STRING("WHITE FLUTE"),
-        COMPOUND_STRING("BLACK FLUTE"),
-        COMPOUND_STRING("PRETTY CHAIR"),
-        COMPOUND_STRING("PRETTY DESK"),
-        gText_Exit
-    },
-    [SCROLL_MULTI_POKEMON_FAN_CLUB_RATER] =
-    {
-        COMPOUND_STRING("0 pts"),
-        COMPOUND_STRING("10 pts"),
-        COMPOUND_STRING("20 pts"),
-        COMPOUND_STRING("30 pts"),
-        COMPOUND_STRING("40 pts"),
-        COMPOUND_STRING("50 pts"),
-        COMPOUND_STRING("60 pts"),
-        COMPOUND_STRING("70 pts"),
-        COMPOUND_STRING("80 pts"),
-        COMPOUND_STRING("90 pts"),
-        COMPOUND_STRING("100 pts"),
-        COMPOUND_STRING("?")
-    },
-    [SCROLL_MULTI_BF_EXCHANGE_CORNER_DECOR_VENDOR_1] =
-    {
-        COMPOUND_STRING("KISS POSTER{CLEAR_TO 0x5E}16BP"),
-        COMPOUND_STRING("KISS CUSHION{CLEAR_TO 0x5E}32BP"),
-        COMPOUND_STRING("SMOOCHUM DOLL{CLEAR_TO 0x5E}32BP"),
-        COMPOUND_STRING("TOGEPI DOLL{CLEAR_TO 0x5E}48BP"),
-        COMPOUND_STRING("MEOWTH DOLL{CLEAR_TO 0x5E}48BP"),
-        COMPOUND_STRING("CLEFAIRY DOLL{CLEAR_TO 0x5E}48BP"),
-        COMPOUND_STRING("DITTO DOLL{CLEAR_TO 0x5E}48BP"),
-        COMPOUND_STRING("CYNDAQUIL DOLL{CLEAR_TO 0x5E}80BP"),
-        COMPOUND_STRING("CHIKORITA DOLL{CLEAR_TO 0x5E}80BP"),
-        COMPOUND_STRING("TOTODILE DOLL{CLEAR_TO 0x5E}80BP"),
-        gText_Exit
-    },
-    [SCROLL_MULTI_BF_EXCHANGE_CORNER_DECOR_VENDOR_2] =
-    {
-        COMPOUND_STRING("LAPRAS DOLL{CLEAR_TO 0x58}128BP"),
-        COMPOUND_STRING("SNORLAX DOLL{CLEAR_TO 0x58}128BP"),
-        COMPOUND_STRING("VENUSAUR DOLL{CLEAR_TO 0x58}256BP"),
-        COMPOUND_STRING("CHARIZARD DOLL{CLEAR_TO 0x58}256BP"),
-        COMPOUND_STRING("BLASTOISE DOLL{CLEAR_TO 0x58}256BP"),
-        gText_Exit
-    },
-    [SCROLL_MULTI_BF_EXCHANGE_CORNER_VITAMIN_VENDOR] =
-    {
-        COMPOUND_STRING("PROTEIN{CLEAR_TO 0x64}1BP"),
-        COMPOUND_STRING("CALCIUM{CLEAR_TO 0x64}1BP"),
-        COMPOUND_STRING("IRON{CLEAR_TO 0x64}1BP"),
-        COMPOUND_STRING("ZINC{CLEAR_TO 0x64}1BP"),
-        COMPOUND_STRING("CARBOS{CLEAR_TO 0x64}1BP"),
-        COMPOUND_STRING("HP UP{CLEAR_TO 0x64}1BP"),
-        gText_Exit
-    },
-    [SCROLL_MULTI_BF_EXCHANGE_CORNER_HOLD_ITEM_VENDOR] =
-    {
-        COMPOUND_STRING("LEFTOVERS{CLEAR_TO 0x5E}48BP"),
-        COMPOUND_STRING("WHITE HERB{CLEAR_TO 0x5E}48BP"),
-        COMPOUND_STRING("QUICK CLAW{CLEAR_TO 0x5E}48BP"),
-        COMPOUND_STRING("MENTAL HERB{CLEAR_TO 0x5E}48BP"),
-        COMPOUND_STRING("BRIGHTPOWDER{CLEAR_TO 0x5E}64BP"),
-        COMPOUND_STRING("CHOICE BAND{CLEAR_TO 0x5E}64BP"),
-        COMPOUND_STRING("KING'S ROCK{CLEAR_TO 0x5E}64BP"),
-        COMPOUND_STRING("FOCUS BAND{CLEAR_TO 0x5E}64BP"),
-        COMPOUND_STRING("SCOPE LENS{CLEAR_TO 0x5E}64BP"),
-        gText_Exit
-    },
-    [SCROLL_MULTI_BERRY_POWDER_VENDOR] =
-    {
-        COMPOUND_STRING("ENERGYPOWDER{CLEAR_TO 114}{FONT_SMALL}50"),
-        COMPOUND_STRING("ENERGY ROOT{CLEAR_TO 114}{FONT_SMALL}80"),
-        COMPOUND_STRING("HEAL POWDER{CLEAR_TO 114}{FONT_SMALL}50"),
-        COMPOUND_STRING("REVIVAL HERB{CLEAR_TO 108}{FONT_SMALL}300"),
-        COMPOUND_STRING("PROTEIN{CLEAR_TO 99}{FONT_SMALL}1,000"),
-        COMPOUND_STRING("IRON{CLEAR_TO 99}{FONT_SMALL}1,000"),
-        COMPOUND_STRING("CARBOS{CLEAR_TO 99}{FONT_SMALL}1,000"),
-        COMPOUND_STRING("CALCIUM{CLEAR_TO 99}{FONT_SMALL}1,000"),
-        COMPOUND_STRING("ZINC{CLEAR_TO 99}{FONT_SMALL}1,000"),
-        COMPOUND_STRING("HP UP{CLEAR_TO 99}{FONT_SMALL}1,000"),
-        COMPOUND_STRING("PP UP{CLEAR_TO 99}{FONT_SMALL}3,000"),
-        gText_Exit
-    },
-    [SCROLL_MULTI_BF_RECEPTIONIST] =
-    {
-        gText_BattleTower2,
-        gText_BattleDome,
-        gText_BattlePalace,
-        gText_BattleArena,
-        gText_BattleFactory,
-        gText_BattlePike,
-        gText_BattlePyramid,
-        gText_RankingHall,
-        gText_ExchangeService,
-        gText_Exit
-    },
-    [SCROLL_MULTI_BF_MOVE_TUTOR_1] =
-    {
-        COMPOUND_STRING("SOFTBOILED{CLEAR_TO 0x4E}16BP"),
-        COMPOUND_STRING("SEISMIC TOSS{CLEAR_TO 0x4E}24BP"),
-        COMPOUND_STRING("DREAM EATER{CLEAR_TO 0x4E}24BP"),
-        COMPOUND_STRING("MEGA PUNCH{CLEAR_TO 0x4E}24BP"),
-        COMPOUND_STRING("MEGA KICK{CLEAR_TO 0x4E}48BP"),
-        COMPOUND_STRING("BODY SLAM{CLEAR_TO 0x4E}48BP"),
-        COMPOUND_STRING("ROCK SLIDE{CLEAR_TO 0x4E}48BP"),
-        COMPOUND_STRING("COUNTER{CLEAR_TO 0x4E}48BP"),
-        COMPOUND_STRING("THUNDER WAVE{CLEAR_TO 0x4E}48BP"),
-        COMPOUND_STRING("SWORDS DANCE{CLEAR_TO 0x4E}48BP"),
-        gText_Exit
-    },
-    [SCROLL_MULTI_BF_MOVE_TUTOR_2] =
-    {
-        COMPOUND_STRING("DEFENSE CURL{CLEAR_TO 0x4E}16BP"),
-        COMPOUND_STRING("SNORE{CLEAR_TO 0x4E}24BP"),
-        COMPOUND_STRING("MUD-SLAP{CLEAR_TO 0x4E}24BP"),
-        COMPOUND_STRING("SWIFT{CLEAR_TO 0x4E}24BP"),
-        COMPOUND_STRING("ICY WIND{CLEAR_TO 0x4E}24BP"),
-        COMPOUND_STRING("ENDURE{CLEAR_TO 0x4E}48BP"),
-        COMPOUND_STRING("PSYCH UP{CLEAR_TO 0x4E}48BP"),
-        COMPOUND_STRING("ICE PUNCH{CLEAR_TO 0x4E}48BP"),
-        COMPOUND_STRING("THUNDERPUNCH{CLEAR_TO 0x4E}48BP"),
-        COMPOUND_STRING("FIRE PUNCH{CLEAR_TO 0x4E}48BP"),
-        gText_Exit
-    },
-    [SCROLL_MULTI_SS_TIDAL_DESTINATION] =
-    {
-        gText_SlateportCity,
-        gText_BattleFrontier,
-        gText_SouthernIsland,
-        gText_NavelRock,
-        gText_BirthIsland,
-        gText_FarawayIsland,
-        gText_Exit
-    },
-    [SCROLL_MULTI_BATTLE_TENT_RULES] =
-    {
-        gText_BattleTrainers,
-        gText_BattleBasics,
-        gText_PokemonNature,
-        gText_PokemonMoves,
-        gText_Underpowered,
-        gText_WhenInDanger,
-        gText_Exit
-    }
-};
+        [SCROLL_MULTI_NONE] =
+            {
+                gText_Exit},
+        [SCROLL_MULTI_GLASS_WORKSHOP_VENDOR] =
+            {
+                COMPOUND_STRING("BLUE FLUTE"),
+                COMPOUND_STRING("YELLOW FLUTE"),
+                COMPOUND_STRING("RED FLUTE"),
+                COMPOUND_STRING("WHITE FLUTE"),
+                COMPOUND_STRING("BLACK FLUTE"),
+                COMPOUND_STRING("PRETTY CHAIR"),
+                COMPOUND_STRING("PRETTY DESK"),
+                gText_Exit},
+        [SCROLL_MULTI_POKEMON_FAN_CLUB_RATER] =
+            {
+                COMPOUND_STRING("0 pts"),
+                COMPOUND_STRING("10 pts"),
+                COMPOUND_STRING("20 pts"),
+                COMPOUND_STRING("30 pts"),
+                COMPOUND_STRING("40 pts"),
+                COMPOUND_STRING("50 pts"),
+                COMPOUND_STRING("60 pts"),
+                COMPOUND_STRING("70 pts"),
+                COMPOUND_STRING("80 pts"),
+                COMPOUND_STRING("90 pts"),
+                COMPOUND_STRING("100 pts"),
+                COMPOUND_STRING("?")},
+        [SCROLL_MULTI_BF_EXCHANGE_CORNER_DECOR_VENDOR_1] =
+            {
+                COMPOUND_STRING("KISS POSTER{CLEAR_TO 0x5E}16BP"),
+                COMPOUND_STRING("KISS CUSHION{CLEAR_TO 0x5E}32BP"),
+                COMPOUND_STRING("SMOOCHUM DOLL{CLEAR_TO 0x5E}32BP"),
+                COMPOUND_STRING("TOGEPI DOLL{CLEAR_TO 0x5E}48BP"),
+                COMPOUND_STRING("MEOWTH DOLL{CLEAR_TO 0x5E}48BP"),
+                COMPOUND_STRING("CLEFAIRY DOLL{CLEAR_TO 0x5E}48BP"),
+                COMPOUND_STRING("DITTO DOLL{CLEAR_TO 0x5E}48BP"),
+                COMPOUND_STRING("CYNDAQUIL DOLL{CLEAR_TO 0x5E}80BP"),
+                COMPOUND_STRING("CHIKORITA DOLL{CLEAR_TO 0x5E}80BP"),
+                COMPOUND_STRING("TOTODILE DOLL{CLEAR_TO 0x5E}80BP"),
+                gText_Exit},
+        [SCROLL_MULTI_BF_EXCHANGE_CORNER_DECOR_VENDOR_2] =
+            {
+                COMPOUND_STRING("LAPRAS DOLL{CLEAR_TO 0x58}128BP"),
+                COMPOUND_STRING("SNORLAX DOLL{CLEAR_TO 0x58}128BP"),
+                COMPOUND_STRING("VENUSAUR DOLL{CLEAR_TO 0x58}256BP"),
+                COMPOUND_STRING("CHARIZARD DOLL{CLEAR_TO 0x58}256BP"),
+                COMPOUND_STRING("BLASTOISE DOLL{CLEAR_TO 0x58}256BP"),
+                gText_Exit},
+        [SCROLL_MULTI_BF_EXCHANGE_CORNER_VITAMIN_VENDOR] =
+            {
+                COMPOUND_STRING("PROTEIN{CLEAR_TO 0x64}1BP"),
+                COMPOUND_STRING("CALCIUM{CLEAR_TO 0x64}1BP"),
+                COMPOUND_STRING("IRON{CLEAR_TO 0x64}1BP"),
+                COMPOUND_STRING("ZINC{CLEAR_TO 0x64}1BP"),
+                COMPOUND_STRING("CARBOS{CLEAR_TO 0x64}1BP"),
+                COMPOUND_STRING("HP UP{CLEAR_TO 0x64}1BP"),
+                gText_Exit},
+        [SCROLL_MULTI_BF_EXCHANGE_CORNER_HOLD_ITEM_VENDOR] =
+            {
+                COMPOUND_STRING("LEFTOVERS{CLEAR_TO 0x5E}48BP"),
+                COMPOUND_STRING("WHITE HERB{CLEAR_TO 0x5E}48BP"),
+                COMPOUND_STRING("QUICK CLAW{CLEAR_TO 0x5E}48BP"),
+                COMPOUND_STRING("MENTAL HERB{CLEAR_TO 0x5E}48BP"),
+                COMPOUND_STRING("BRIGHTPOWDER{CLEAR_TO 0x5E}64BP"),
+                COMPOUND_STRING("CHOICE BAND{CLEAR_TO 0x5E}64BP"),
+                COMPOUND_STRING("KING'S ROCK{CLEAR_TO 0x5E}64BP"),
+                COMPOUND_STRING("FOCUS BAND{CLEAR_TO 0x5E}64BP"),
+                COMPOUND_STRING("SCOPE LENS{CLEAR_TO 0x5E}64BP"),
+                gText_Exit},
+        [SCROLL_MULTI_BERRY_POWDER_VENDOR] =
+            {
+                COMPOUND_STRING("ENERGYPOWDER{CLEAR_TO 114}{FONT_SMALL}50"),
+                COMPOUND_STRING("ENERGY ROOT{CLEAR_TO 114}{FONT_SMALL}80"),
+                COMPOUND_STRING("HEAL POWDER{CLEAR_TO 114}{FONT_SMALL}50"),
+                COMPOUND_STRING("REVIVAL HERB{CLEAR_TO 108}{FONT_SMALL}300"),
+                COMPOUND_STRING("PROTEIN{CLEAR_TO 99}{FONT_SMALL}1,000"),
+                COMPOUND_STRING("IRON{CLEAR_TO 99}{FONT_SMALL}1,000"),
+                COMPOUND_STRING("CARBOS{CLEAR_TO 99}{FONT_SMALL}1,000"),
+                COMPOUND_STRING("CALCIUM{CLEAR_TO 99}{FONT_SMALL}1,000"),
+                COMPOUND_STRING("ZINC{CLEAR_TO 99}{FONT_SMALL}1,000"),
+                COMPOUND_STRING("HP UP{CLEAR_TO 99}{FONT_SMALL}1,000"),
+                COMPOUND_STRING("PP UP{CLEAR_TO 99}{FONT_SMALL}3,000"),
+                gText_Exit},
+        [SCROLL_MULTI_BF_RECEPTIONIST] =
+            {
+                gText_BattleTower2,
+                gText_BattleDome,
+                gText_BattlePalace,
+                gText_BattleArena,
+                gText_BattleFactory,
+                gText_BattlePike,
+                gText_BattlePyramid,
+                gText_RankingHall,
+                gText_ExchangeService,
+                gText_Exit},
+        [SCROLL_MULTI_BF_MOVE_TUTOR_1] =
+            {
+                COMPOUND_STRING("SOFTBOILED{CLEAR_TO 0x4E}16BP"),
+                COMPOUND_STRING("SEISMIC TOSS{CLEAR_TO 0x4E}24BP"),
+                COMPOUND_STRING("DREAM EATER{CLEAR_TO 0x4E}24BP"),
+                COMPOUND_STRING("MEGA PUNCH{CLEAR_TO 0x4E}24BP"),
+                COMPOUND_STRING("MEGA KICK{CLEAR_TO 0x4E}48BP"),
+                COMPOUND_STRING("BODY SLAM{CLEAR_TO 0x4E}48BP"),
+                COMPOUND_STRING("ROCK SLIDE{CLEAR_TO 0x4E}48BP"),
+                COMPOUND_STRING("COUNTER{CLEAR_TO 0x4E}48BP"),
+                COMPOUND_STRING("THUNDER WAVE{CLEAR_TO 0x4E}48BP"),
+                COMPOUND_STRING("SWORDS DANCE{CLEAR_TO 0x4E}48BP"),
+                gText_Exit},
+        [SCROLL_MULTI_BF_MOVE_TUTOR_2] =
+            {
+                COMPOUND_STRING("DEFENSE CURL{CLEAR_TO 0x4E}16BP"),
+                COMPOUND_STRING("SNORE{CLEAR_TO 0x4E}24BP"),
+                COMPOUND_STRING("MUD-SLAP{CLEAR_TO 0x4E}24BP"),
+                COMPOUND_STRING("SWIFT{CLEAR_TO 0x4E}24BP"),
+                COMPOUND_STRING("ICY WIND{CLEAR_TO 0x4E}24BP"),
+                COMPOUND_STRING("ENDURE{CLEAR_TO 0x4E}48BP"),
+                COMPOUND_STRING("PSYCH UP{CLEAR_TO 0x4E}48BP"),
+                COMPOUND_STRING("ICE PUNCH{CLEAR_TO 0x4E}48BP"),
+                COMPOUND_STRING("THUNDERPUNCH{CLEAR_TO 0x4E}48BP"),
+                COMPOUND_STRING("FIRE PUNCH{CLEAR_TO 0x4E}48BP"),
+                gText_Exit},
+        [SCROLL_MULTI_SS_TIDAL_DESTINATION] =
+            {
+                gText_SlateportCity,
+                gText_BattleFrontier,
+                gText_SouthernIsland,
+                gText_NavelRock,
+                gText_BirthIsland,
+                gText_FarawayIsland,
+                gText_Exit},
+        [SCROLL_MULTI_BATTLE_TENT_RULES] =
+            {
+                gText_BattleTrainers,
+                gText_BattleBasics,
+                gText_PokemonNature,
+                gText_PokemonMoves,
+                gText_Underpowered,
+                gText_WhenInDanger,
+                gText_Exit}};
 
 static void Task_ShowScrollableMultichoice(u8 taskId)
 {
@@ -2740,16 +2700,6 @@ static void Task_ScrollableMultichoice_WaitReturnToList(u8 taskId)
     }
 }
 
-// Never called
-void ScrollableMultichoice_TryReturnToList(void)
-{
-    u8 taskId = FindTaskIdByFunc(Task_ScrollableMultichoice_WaitReturnToList);
-    if (taskId == TASK_NONE)
-        ScriptContext_Enable();
-    else
-        gTasks[taskId].tKeepOpenAfterSelect++; // Return to list
-}
-
 static void Task_ScrollableMultichoice_ReturnToList(u8 taskId)
 {
     LockPlayerFieldControls();
@@ -2770,8 +2720,7 @@ static void ScrollableMultichoice_UpdateScrollArrows(u8 taskId)
         .fullyDownThreshold = 0,
         .tileTag = GFXTAG_MULTICHOICE_SCROLL_ARROWS,
         .palTag = PALTAG_MULTICHOICE_SCROLL_ARROWS,
-        .palNum = 0
-    };
+        .palNum = 0};
 
     struct Task *task = &gTasks[taskId];
     struct ScrollArrowsTemplate template = sScrollableMultichoice_ScrollArrowsTemplate;
@@ -2799,7 +2748,6 @@ static void ScrollableMultichoice_RemoveScrollArrows(u8 taskId)
 // Removed for Emerald (replaced by ShowScrollableMultichoice)
 void ShowGlassWorkshopMenu(void)
 {
-
 }
 
 void SetBattleTowerLinkPlayerGfx(void)
@@ -2835,20 +2783,20 @@ void UpdateFrontierGambler(u16 daysSince)
 void ShowFrontierGamblerLookingMessage(void)
 {
     static const u8 *const sFrontierGamblerLookingMessages[] =
-    {
-        BattleFrontier_Lounge3_Text_ChallengeBattleTowerSingle,
-        BattleFrontier_Lounge3_Text_ChallengeBattleTowerDouble,
-        BattleFrontier_Lounge3_Text_ChallengeBattleTowerMulti,
-        BattleFrontier_Lounge3_Text_ChallengeBattleDomeSingle,
-        BattleFrontier_Lounge3_Text_ChallengeBattleDomeDouble,
-        BattleFrontier_Lounge3_Text_ChallengeBattleFactorySingle,
-        BattleFrontier_Lounge3_Text_ChallengeBattleFactoryDouble,
-        BattleFrontier_Lounge3_Text_ChallengeBattlePalaceSingle,
-        BattleFrontier_Lounge3_Text_ChallengeBattlePalaceDouble,
-        BattleFrontier_Lounge3_Text_ChallengeBattleArena,
-        BattleFrontier_Lounge3_Text_ChallengeBattlePike,
-        BattleFrontier_Lounge3_Text_ChallengeBattlePyramid,
-    };
+        {
+            BattleFrontier_Lounge3_Text_ChallengeBattleTowerSingle,
+            BattleFrontier_Lounge3_Text_ChallengeBattleTowerDouble,
+            BattleFrontier_Lounge3_Text_ChallengeBattleTowerMulti,
+            BattleFrontier_Lounge3_Text_ChallengeBattleDomeSingle,
+            BattleFrontier_Lounge3_Text_ChallengeBattleDomeDouble,
+            BattleFrontier_Lounge3_Text_ChallengeBattleFactorySingle,
+            BattleFrontier_Lounge3_Text_ChallengeBattleFactoryDouble,
+            BattleFrontier_Lounge3_Text_ChallengeBattlePalaceSingle,
+            BattleFrontier_Lounge3_Text_ChallengeBattlePalaceDouble,
+            BattleFrontier_Lounge3_Text_ChallengeBattleArena,
+            BattleFrontier_Lounge3_Text_ChallengeBattlePike,
+            BattleFrontier_Lounge3_Text_ChallengeBattlePyramid,
+        };
 
     u16 challenge = VarGet(VAR_FRONTIER_GAMBLER_CHALLENGE);
     ShowFieldMessage(sFrontierGamblerLookingMessages[challenge]);
@@ -2858,20 +2806,20 @@ void ShowFrontierGamblerLookingMessage(void)
 void ShowFrontierGamblerGoMessage(void)
 {
     static const u8 *const sFrontierGamblerGoMessages[] =
-    {
-        BattleFrontier_Lounge3_Text_GetToBattleTowerSingle,
-        BattleFrontier_Lounge3_Text_GetToBattleTowerDouble,
-        BattleFrontier_Lounge3_Text_GetToBattleTowerMulti,
-        BattleFrontier_Lounge3_Text_GetToBattleDomeSingle,
-        BattleFrontier_Lounge3_Text_GetToBattleDomeDouble,
-        BattleFrontier_Lounge3_Text_GetToBattleFactorySingle,
-        BattleFrontier_Lounge3_Text_GetToBattleFactoryDouble,
-        BattleFrontier_Lounge3_Text_GetToBattlePalaceSingle,
-        BattleFrontier_Lounge3_Text_GetToBattlePalaceDouble,
-        BattleFrontier_Lounge3_Text_GetToBattleArena,
-        BattleFrontier_Lounge3_Text_GetToBattlePike,
-        BattleFrontier_Lounge3_Text_GetToBattlePyramid,
-    };
+        {
+            BattleFrontier_Lounge3_Text_GetToBattleTowerSingle,
+            BattleFrontier_Lounge3_Text_GetToBattleTowerDouble,
+            BattleFrontier_Lounge3_Text_GetToBattleTowerMulti,
+            BattleFrontier_Lounge3_Text_GetToBattleDomeSingle,
+            BattleFrontier_Lounge3_Text_GetToBattleDomeDouble,
+            BattleFrontier_Lounge3_Text_GetToBattleFactorySingle,
+            BattleFrontier_Lounge3_Text_GetToBattleFactoryDouble,
+            BattleFrontier_Lounge3_Text_GetToBattlePalaceSingle,
+            BattleFrontier_Lounge3_Text_GetToBattlePalaceDouble,
+            BattleFrontier_Lounge3_Text_GetToBattleArena,
+            BattleFrontier_Lounge3_Text_GetToBattlePike,
+            BattleFrontier_Lounge3_Text_GetToBattlePyramid,
+        };
 
     ShowFieldMessage(sFrontierGamblerGoMessages[VarGet(VAR_FRONTIER_GAMBLER_SET_CHALLENGE)]);
 }
@@ -2879,20 +2827,19 @@ void ShowFrontierGamblerGoMessage(void)
 void FrontierGamblerSetWonOrLost(bool8 won)
 {
     static const u16 sFrontierChallenges[] =
-    {
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_TOWER,   FRONTIER_MODE_SINGLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_TOWER,   FRONTIER_MODE_DOUBLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_TOWER,   FRONTIER_MODE_MULTIS),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_DOME,    FRONTIER_MODE_SINGLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_DOME,    FRONTIER_MODE_DOUBLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_FACTORY, FRONTIER_MODE_SINGLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_FACTORY, FRONTIER_MODE_DOUBLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_PALACE,  FRONTIER_MODE_SINGLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_PALACE,  FRONTIER_MODE_DOUBLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_ARENA,   FRONTIER_MODE_SINGLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_PIKE,    FRONTIER_MODE_SINGLES),
-        FRONTIER_CHALLENGE(FRONTIER_FACILITY_PYRAMID, FRONTIER_MODE_SINGLES)
-    };
+        {
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_TOWER, FRONTIER_MODE_SINGLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_TOWER, FRONTIER_MODE_DOUBLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_TOWER, FRONTIER_MODE_MULTIS),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_DOME, FRONTIER_MODE_SINGLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_DOME, FRONTIER_MODE_DOUBLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_FACTORY, FRONTIER_MODE_SINGLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_FACTORY, FRONTIER_MODE_DOUBLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_PALACE, FRONTIER_MODE_SINGLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_PALACE, FRONTIER_MODE_DOUBLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_ARENA, FRONTIER_MODE_SINGLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_PIKE, FRONTIER_MODE_SINGLES),
+            FRONTIER_CHALLENGE(FRONTIER_FACILITY_PYRAMID, FRONTIER_MODE_SINGLES)};
 
     u16 battleMode = VarGet(VAR_FRONTIER_BATTLE_MODE);
     u16 challenge = VarGet(VAR_FRONTIER_GAMBLER_SET_CHALLENGE);
@@ -2900,7 +2847,7 @@ void FrontierGamblerSetWonOrLost(bool8 won)
 
     if (VarGet(VAR_FRONTIER_GAMBLER_STATE) == FRONTIER_GAMBLER_PLACED_BET)
     {
-        if (sFrontierChallenges[challenge] ==  FRONTIER_CHALLENGE(frontierFacilityId, battleMode))
+        if (sFrontierChallenges[challenge] == FRONTIER_CHALLENGE(frontierFacilityId, battleMode))
         {
             if (won)
                 VarSet(VAR_FRONTIER_GAMBLER_STATE, FRONTIER_GAMBLER_WON);
@@ -2922,15 +2869,15 @@ void UpdateBattlePointsWindow(void)
 void ShowBattlePointsWindow(void)
 {
     static const struct WindowTemplate sBattlePoints_WindowTemplate =
-    {
-        .bg = 0,
-        .tilemapLeft = 1,
-        .tilemapTop = 1,
-        .width = 6,
-        .height = 2,
-        .paletteNum = 15,
-        .baseBlock = 8,
-    };
+        {
+            .bg = 0,
+            .tilemapLeft = 1,
+            .tilemapTop = 1,
+            .width = 6,
+            .height = 2,
+            .paletteNum = 15,
+            .baseBlock = 8,
+        };
 
     sBattlePointsWindowId = AddWindow(&sBattlePoints_WindowTemplate);
     SetStandardWindowBorderStyle(sBattlePointsWindowId, FALSE);
@@ -2968,15 +2915,15 @@ u16 GetFrontierBattlePoints(void)
 void ShowFrontierExchangeCornerItemIconWindow(void)
 {
     static const struct WindowTemplate sFrontierExchangeCorner_ItemIconWindowTemplate =
-    {
-        .bg = 0,
-        .tilemapLeft = 2,
-        .tilemapTop = 9,
-        .width = 4,
-        .height = 4,
-        .paletteNum = 15,
-        .baseBlock = 20,
-    };
+        {
+            .bg = 0,
+            .tilemapLeft = 2,
+            .tilemapTop = 9,
+            .width = 4,
+            .height = 4,
+            .paletteNum = 15,
+            .baseBlock = 20,
+        };
 
     sFrontierExchangeCorner_ItemIconWindowId = AddWindow(&sFrontierExchangeCorner_ItemIconWindowTemplate);
     SetStandardWindowBorderStyle(sFrontierExchangeCorner_ItemIconWindowId, FALSE);
@@ -2991,7 +2938,7 @@ void CloseFrontierExchangeCornerItemIconWindow(void)
 
 static void FillFrontierExchangeCornerWindowAndItemIcon(u16 menu, u16 selection)
 {
-    #include "data/battle_frontier/battle_frontier_exchange_corner.h"
+#include "data/battle_frontier/battle_frontier_exchange_corner.h"
 
     if (menu >= SCROLL_MULTI_BF_EXCHANGE_CORNER_DECOR_VENDOR_1 && menu <= SCROLL_MULTI_BF_EXCHANGE_CORNER_HOLD_ITEM_VENDOR)
     {
@@ -3076,15 +3023,15 @@ void BufferBattleFrontierTutorMoveName(void)
 static void ShowBattleFrontierTutorWindow(u8 menu, u16 selection)
 {
     static const struct WindowTemplate sBattleFrontierTutor_WindowTemplate =
-    {
-        .bg = 0,
-        .tilemapLeft = 1,
-        .tilemapTop = 7,
-        .width = 12,
-        .height = 6,
-        .paletteNum = 15,
-        .baseBlock = 28,
-    };
+        {
+            .bg = 0,
+            .tilemapLeft = 1,
+            .tilemapTop = 7,
+            .width = 12,
+            .height = 6,
+            .paletteNum = 15,
+            .baseBlock = 28,
+        };
 
     if (menu == SCROLL_MULTI_BF_MOVE_TUTOR_1 || menu == SCROLL_MULTI_BF_MOVE_TUTOR_2)
     {
@@ -3100,34 +3047,34 @@ static void ShowBattleFrontierTutorWindow(u8 menu, u16 selection)
 static void ShowBattleFrontierTutorMoveDescription(u8 menu, u16 selection)
 {
     static const u8 *const sBattleFrontier_TutorMoveDescriptions1[] =
-    {
-        BattleFrontier_Lounge7_Text_SoftboiledDesc,
-        BattleFrontier_Lounge7_Text_SeismicTossDesc,
-        BattleFrontier_Lounge7_Text_DreamEaterDesc,
-        BattleFrontier_Lounge7_Text_MegaPunchDesc,
-        BattleFrontier_Lounge7_Text_MegaKickDesc,
-        BattleFrontier_Lounge7_Text_BodySlamDesc,
-        BattleFrontier_Lounge7_Text_RockSlideDesc,
-        BattleFrontier_Lounge7_Text_CounterDesc,
-        BattleFrontier_Lounge7_Text_ThunderWaveDesc,
-        BattleFrontier_Lounge7_Text_SwordsDanceDesc,
-        gText_Exit,
-    };
+        {
+            BattleFrontier_Lounge7_Text_SoftboiledDesc,
+            BattleFrontier_Lounge7_Text_SeismicTossDesc,
+            BattleFrontier_Lounge7_Text_DreamEaterDesc,
+            BattleFrontier_Lounge7_Text_MegaPunchDesc,
+            BattleFrontier_Lounge7_Text_MegaKickDesc,
+            BattleFrontier_Lounge7_Text_BodySlamDesc,
+            BattleFrontier_Lounge7_Text_RockSlideDesc,
+            BattleFrontier_Lounge7_Text_CounterDesc,
+            BattleFrontier_Lounge7_Text_ThunderWaveDesc,
+            BattleFrontier_Lounge7_Text_SwordsDanceDesc,
+            gText_Exit,
+        };
 
     static const u8 *const sBattleFrontier_TutorMoveDescriptions2[] =
-    {
-        BattleFrontier_Lounge7_Text_DefenseCurlDesc,
-        BattleFrontier_Lounge7_Text_SnoreDesc,
-        BattleFrontier_Lounge7_Text_MudSlapDesc,
-        BattleFrontier_Lounge7_Text_SwiftDesc,
-        BattleFrontier_Lounge7_Text_IcyWindDesc,
-        BattleFrontier_Lounge7_Text_EndureDesc,
-        BattleFrontier_Lounge7_Text_PsychUpDesc,
-        BattleFrontier_Lounge7_Text_IcePunchDesc,
-        BattleFrontier_Lounge7_Text_ThunderPunchDesc,
-        BattleFrontier_Lounge7_Text_FirePunchDesc,
-        gText_Exit,
-    };
+        {
+            BattleFrontier_Lounge7_Text_DefenseCurlDesc,
+            BattleFrontier_Lounge7_Text_SnoreDesc,
+            BattleFrontier_Lounge7_Text_MudSlapDesc,
+            BattleFrontier_Lounge7_Text_SwiftDesc,
+            BattleFrontier_Lounge7_Text_IcyWindDesc,
+            BattleFrontier_Lounge7_Text_EndureDesc,
+            BattleFrontier_Lounge7_Text_PsychUpDesc,
+            BattleFrontier_Lounge7_Text_IcePunchDesc,
+            BattleFrontier_Lounge7_Text_ThunderPunchDesc,
+            BattleFrontier_Lounge7_Text_FirePunchDesc,
+            gText_Exit,
+        };
 
     if (menu == SCROLL_MULTI_BF_MOVE_TUTOR_1 || menu == SCROLL_MULTI_BF_MOVE_TUTOR_2)
     {
@@ -3223,22 +3170,22 @@ static const u16 sDeoxysRockPalettes[DEOXYS_ROCK_LEVELS][16] = {
 };
 
 static const u8 sDeoxysRockCoords[DEOXYS_ROCK_LEVELS][2] = {
-    { 15, 12 },
-    { 11, 14 },
-    { 15,  8 },
-    { 19, 14 },
-    { 12, 11 },
-    { 18, 11 },
-    { 15, 14 },
-    { 11, 14 },
-    { 19, 14 },
-    { 15, 15 },
-    { 15, 10 },
+    {15, 12},
+    {11, 14},
+    {15, 8},
+    {19, 14},
+    {12, 11},
+    {18, 11},
+    {15, 14},
+    {11, 14},
+    {19, 14},
+    {15, 15},
+    {15, 10},
 };
 
 static void Task_DeoxysRockInteraction(u8 taskId)
 {
-    static const u8 sStoneMaxStepCounts[DEOXYS_ROCK_LEVELS - 1] = { 4, 8, 8, 8, 4, 4, 4, 6, 3, 3 };
+    static const u8 sStoneMaxStepCounts[DEOXYS_ROCK_LEVELS - 1] = {4, 8, 8, 8, 4, 4, 4, 6, 3, 3};
 
     if (FlagGet(FLAG_DEOXYS_ROCK_COMPLETE) == TRUE)
     {
@@ -3430,8 +3377,7 @@ bool32 GetAbnormalWeatherMapNameAndType(void)
         MAP_NUM(MAP_ROUTE127),
         MAP_NUM(MAP_ROUTE127),
         MAP_NUM(MAP_ROUTE129),
-        MAP_NUM(MAP_ROUTE129)
-    };
+        MAP_NUM(MAP_ROUTE129)};
 
     u16 abnormalWeather = VarGet(VAR_ABNORMAL_WEATHER_LOCATION);
 
@@ -3447,24 +3393,23 @@ bool8 AbnormalWeatherHasExpired(void)
 {
     // Duplicate array.
     static const u8 sAbnormalWeatherMapNumbers[] =
-    {
-        MAP_NUM(MAP_ROUTE114),
-        MAP_NUM(MAP_ROUTE114),
-        MAP_NUM(MAP_ROUTE115),
-        MAP_NUM(MAP_ROUTE115),
-        MAP_NUM(MAP_ROUTE116),
-        MAP_NUM(MAP_ROUTE116),
-        MAP_NUM(MAP_ROUTE118),
-        MAP_NUM(MAP_ROUTE118),
-        MAP_NUM(MAP_ROUTE105),
-        MAP_NUM(MAP_ROUTE105),
-        MAP_NUM(MAP_ROUTE125),
-        MAP_NUM(MAP_ROUTE125),
-        MAP_NUM(MAP_ROUTE127),
-        MAP_NUM(MAP_ROUTE127),
-        MAP_NUM(MAP_ROUTE129),
-        MAP_NUM(MAP_ROUTE129)
-    };
+        {
+            MAP_NUM(MAP_ROUTE114),
+            MAP_NUM(MAP_ROUTE114),
+            MAP_NUM(MAP_ROUTE115),
+            MAP_NUM(MAP_ROUTE115),
+            MAP_NUM(MAP_ROUTE116),
+            MAP_NUM(MAP_ROUTE116),
+            MAP_NUM(MAP_ROUTE118),
+            MAP_NUM(MAP_ROUTE118),
+            MAP_NUM(MAP_ROUTE105),
+            MAP_NUM(MAP_ROUTE105),
+            MAP_NUM(MAP_ROUTE125),
+            MAP_NUM(MAP_ROUTE125),
+            MAP_NUM(MAP_ROUTE127),
+            MAP_NUM(MAP_ROUTE127),
+            MAP_NUM(MAP_ROUTE129),
+            MAP_NUM(MAP_ROUTE129)};
 
     u16 steps = VarGet(VAR_ABNORMAL_WEATHER_STEP_COUNTER);
     u16 abnormalWeather = VarGet(VAR_ABNORMAL_WEATHER_LOCATION);
@@ -3533,20 +3478,20 @@ void Unused_SetWeatherSunny(void)
 u32 GetMartEmployeeObjectEventId(void)
 {
     static const u8 sPokeMarts[][3] =
-    {
-        { MAP_GROUP(MAP_OLDALE_TOWN_MART),     MAP_NUM(MAP_OLDALE_TOWN_MART),     LOCALID_OLDALE_MART_CLERK },
-        { MAP_GROUP(MAP_LAVARIDGE_TOWN_MART),  MAP_NUM(MAP_LAVARIDGE_TOWN_MART),  LOCALID_LAVARIDGE_MART_CLERK },
-        { MAP_GROUP(MAP_FALLARBOR_TOWN_MART),  MAP_NUM(MAP_FALLARBOR_TOWN_MART),  LOCALID_FALLARBOR_MART_CLERK },
-        { MAP_GROUP(MAP_VERDANTURF_TOWN_MART), MAP_NUM(MAP_VERDANTURF_TOWN_MART), LOCALID_VERDANTURF_MART_CLERK },
-        { MAP_GROUP(MAP_PETALBURG_CITY_MART),  MAP_NUM(MAP_PETALBURG_CITY_MART),  LOCALID_PETALBURG_MART_CLERK },
-        { MAP_GROUP(MAP_SLATEPORT_CITY_MART),  MAP_NUM(MAP_SLATEPORT_CITY_MART),  LOCALID_SLATEPORT_MART_CLERK },
-        { MAP_GROUP(MAP_MAUVILLE_CITY_MART),   MAP_NUM(MAP_MAUVILLE_CITY_MART),   LOCALID_MAUVILLE_MART_CLERK },
-        { MAP_GROUP(MAP_RUSTBORO_CITY_MART),   MAP_NUM(MAP_RUSTBORO_CITY_MART),   LOCALID_RUSTBORO_MART_CLERK },
-        { MAP_GROUP(MAP_FORTREE_CITY_MART),    MAP_NUM(MAP_FORTREE_CITY_MART),    LOCALID_FORTREE_MART_CLERK },
-        { MAP_GROUP(MAP_MOSSDEEP_CITY_MART),   MAP_NUM(MAP_MOSSDEEP_CITY_MART),   LOCALID_MOSSDEEP_MART_CLERK },
-        { MAP_GROUP(MAP_SOOTOPOLIS_CITY_MART), MAP_NUM(MAP_SOOTOPOLIS_CITY_MART), LOCALID_SOOTOPOLIS_MART_CLERK },
-        { MAP_GROUP(MAP_BATTLE_FRONTIER_MART), MAP_NUM(MAP_BATTLE_FRONTIER_MART), LOCALID_FRONTIER_MART_CLERK },
-    };
+        {
+            {MAP_GROUP(MAP_OLDALE_TOWN_MART), MAP_NUM(MAP_OLDALE_TOWN_MART), LOCALID_OLDALE_MART_CLERK},
+            {MAP_GROUP(MAP_LAVARIDGE_TOWN_MART), MAP_NUM(MAP_LAVARIDGE_TOWN_MART), LOCALID_LAVARIDGE_MART_CLERK},
+            {MAP_GROUP(MAP_FALLARBOR_TOWN_MART), MAP_NUM(MAP_FALLARBOR_TOWN_MART), LOCALID_FALLARBOR_MART_CLERK},
+            {MAP_GROUP(MAP_VERDANTURF_TOWN_MART), MAP_NUM(MAP_VERDANTURF_TOWN_MART), LOCALID_VERDANTURF_MART_CLERK},
+            {MAP_GROUP(MAP_PETALBURG_CITY_MART), MAP_NUM(MAP_PETALBURG_CITY_MART), LOCALID_PETALBURG_MART_CLERK},
+            {MAP_GROUP(MAP_SLATEPORT_CITY_MART), MAP_NUM(MAP_SLATEPORT_CITY_MART), LOCALID_SLATEPORT_MART_CLERK},
+            {MAP_GROUP(MAP_MAUVILLE_CITY_MART), MAP_NUM(MAP_MAUVILLE_CITY_MART), LOCALID_MAUVILLE_MART_CLERK},
+            {MAP_GROUP(MAP_RUSTBORO_CITY_MART), MAP_NUM(MAP_RUSTBORO_CITY_MART), LOCALID_RUSTBORO_MART_CLERK},
+            {MAP_GROUP(MAP_FORTREE_CITY_MART), MAP_NUM(MAP_FORTREE_CITY_MART), LOCALID_FORTREE_MART_CLERK},
+            {MAP_GROUP(MAP_MOSSDEEP_CITY_MART), MAP_NUM(MAP_MOSSDEEP_CITY_MART), LOCALID_MOSSDEEP_MART_CLERK},
+            {MAP_GROUP(MAP_SOOTOPOLIS_CITY_MART), MAP_NUM(MAP_SOOTOPOLIS_CITY_MART), LOCALID_SOOTOPOLIS_MART_CLERK},
+            {MAP_GROUP(MAP_BATTLE_FRONTIER_MART), MAP_NUM(MAP_BATTLE_FRONTIER_MART), LOCALID_FRONTIER_MART_CLERK},
+        };
 
     u8 i;
     for (i = 0; i < ARRAY_COUNT(sPokeMarts); i++)
@@ -3638,14 +3583,11 @@ static void Task_LinkRetireStatusWithBattleTowerPartner(u8 taskId)
                 gSpecialVar_0x8005 = gBlockRecvBuffer[1][0];
                 ResetBlockReceivedFlag(1);
 
-                if (gSpecialVar_0x8004 == BATTLE_TOWER_LINK_RETIRE
-                 && gSpecialVar_0x8005 == BATTLE_TOWER_LINK_RETIRE)
+                if (gSpecialVar_0x8004 == BATTLE_TOWER_LINK_RETIRE && gSpecialVar_0x8005 == BATTLE_TOWER_LINK_RETIRE)
                     gSpecialVar_Result = BATTLE_TOWER_LINKSTAT_BOTH_RETIRE;
-                else if (gSpecialVar_0x8004 == BATTLE_TOWER_LINK_CONTINUE
-                      && gSpecialVar_0x8005 == BATTLE_TOWER_LINK_RETIRE)
+                else if (gSpecialVar_0x8004 == BATTLE_TOWER_LINK_CONTINUE && gSpecialVar_0x8005 == BATTLE_TOWER_LINK_RETIRE)
                     gSpecialVar_Result = BATTLE_TOWER_LINKSTAT_MEMBER_RETIRE;
-                else if (gSpecialVar_0x8004 == BATTLE_TOWER_LINK_RETIRE
-                      && gSpecialVar_0x8005 == BATTLE_TOWER_LINK_CONTINUE)
+                else if (gSpecialVar_0x8004 == BATTLE_TOWER_LINK_RETIRE && gSpecialVar_0x8005 == BATTLE_TOWER_LINK_CONTINUE)
                     gSpecialVar_Result = BATTLE_TOWER_LINKSTAT_LEADER_RETIRE;
                 else
                     gSpecialVar_Result = BATTLE_TOWER_LINKSTAT_CONTINUE;
@@ -3742,7 +3684,7 @@ void Script_DoRayquazaScene(void)
 }
 
 #define playCount data[0]
-#define delay     data[1]
+#define delay data[1]
 
 void LoopWingFlapSE(void)
 {
@@ -3771,7 +3713,7 @@ static void Task_LoopWingFlapSE(u8 taskId)
 
 #define CURTAIN_HEIGHT 4
 #define CURTAIN_WIDTH 3
-#define tFrameTimer   data
+#define tFrameTimer data
 #define tCurrentFrame data[3]
 
 void CloseBattlePikeCurtain(void)
@@ -3832,30 +3774,29 @@ void ResetHealLocationFromDewford(void)
 bool8 InPokemonCenter(void)
 {
     static const u16 sPokemonCenters[] =
-    {
-        MAP_OLDALE_TOWN_POKEMON_CENTER_1F,
-        MAP_DEWFORD_TOWN_POKEMON_CENTER_1F,
-        MAP_LAVARIDGE_TOWN_POKEMON_CENTER_1F,
-        MAP_FALLARBOR_TOWN_POKEMON_CENTER_1F,
-        MAP_VERDANTURF_TOWN_POKEMON_CENTER_1F,
-        MAP_PACIFIDLOG_TOWN_POKEMON_CENTER_1F,
-        MAP_PETALBURG_CITY_POKEMON_CENTER_1F,
-        MAP_SLATEPORT_CITY_POKEMON_CENTER_1F,
-        MAP_MAUVILLE_CITY_POKEMON_CENTER_1F,
-        MAP_RUSTBORO_CITY_POKEMON_CENTER_1F,
-        MAP_FORTREE_CITY_POKEMON_CENTER_1F,
-        MAP_LILYCOVE_CITY_POKEMON_CENTER_1F,
-        MAP_MOSSDEEP_CITY_POKEMON_CENTER_1F,
-        MAP_SOOTOPOLIS_CITY_POKEMON_CENTER_1F,
-        MAP_EVER_GRANDE_CITY_POKEMON_CENTER_1F,
-        MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F,
-        MAP_BATTLE_FRONTIER_POKEMON_CENTER_1F,
-        MAP_BATTLE_COLOSSEUM_2P,
-        MAP_TRADE_CENTER,
-        MAP_RECORD_CORNER,
-        MAP_BATTLE_COLOSSEUM_4P,
-        MAP_UNDEFINED
-    };
+        {
+            MAP_OLDALE_TOWN_POKEMON_CENTER_1F,
+            MAP_DEWFORD_TOWN_POKEMON_CENTER_1F,
+            MAP_LAVARIDGE_TOWN_POKEMON_CENTER_1F,
+            MAP_FALLARBOR_TOWN_POKEMON_CENTER_1F,
+            MAP_VERDANTURF_TOWN_POKEMON_CENTER_1F,
+            MAP_PACIFIDLOG_TOWN_POKEMON_CENTER_1F,
+            MAP_PETALBURG_CITY_POKEMON_CENTER_1F,
+            MAP_SLATEPORT_CITY_POKEMON_CENTER_1F,
+            MAP_MAUVILLE_CITY_POKEMON_CENTER_1F,
+            MAP_RUSTBORO_CITY_POKEMON_CENTER_1F,
+            MAP_FORTREE_CITY_POKEMON_CENTER_1F,
+            MAP_LILYCOVE_CITY_POKEMON_CENTER_1F,
+            MAP_MOSSDEEP_CITY_POKEMON_CENTER_1F,
+            MAP_SOOTOPOLIS_CITY_POKEMON_CENTER_1F,
+            MAP_EVER_GRANDE_CITY_POKEMON_CENTER_1F,
+            MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F,
+            MAP_BATTLE_FRONTIER_POKEMON_CENTER_1F,
+            MAP_BATTLE_COLOSSEUM_2P,
+            MAP_TRADE_CENTER,
+            MAP_RECORD_CORNER,
+            MAP_BATTLE_COLOSSEUM_4P,
+            MAP_UNDEFINED};
 
     int i;
     u16 map = (gSaveBlock1Ptr->location.mapGroup << 8) + gSaveBlock1Ptr->location.mapNum;
@@ -3900,16 +3841,16 @@ bool8 InPokemonCenter(void)
 */
 
 #define FANCLUB_BITFIELD (gSaveBlock1Ptr->vars[VAR_FANCLUB_FAN_COUNTER - VARS_START])
-#define FANCLUB_COUNTER    0x007F
+#define FANCLUB_COUNTER 0x007F
 
-#define GET_TRAINER_FAN_CLUB_FLAG(flag)  (FANCLUB_BITFIELD >> (flag) & 1)
-#define SET_TRAINER_FAN_CLUB_FLAG(flag)  (FANCLUB_BITFIELD |= 1 << (flag))
+#define GET_TRAINER_FAN_CLUB_FLAG(flag) (FANCLUB_BITFIELD >> (flag) & 1)
+#define SET_TRAINER_FAN_CLUB_FLAG(flag) (FANCLUB_BITFIELD |= 1 << (flag))
 #define FLIP_TRAINER_FAN_CLUB_FLAG(flag) (FANCLUB_BITFIELD ^= 1 << (flag))
 
-#define GET_TRAINER_FAN_CLUB_COUNTER         (FANCLUB_BITFIELD & FANCLUB_COUNTER)
-#define SET_TRAINER_FAN_CLUB_COUNTER(count)  (FANCLUB_BITFIELD = (FANCLUB_BITFIELD & ~FANCLUB_COUNTER) | (count))
+#define GET_TRAINER_FAN_CLUB_COUNTER (FANCLUB_BITFIELD & FANCLUB_COUNTER)
+#define SET_TRAINER_FAN_CLUB_COUNTER(count) (FANCLUB_BITFIELD = (FANCLUB_BITFIELD & ~FANCLUB_COUNTER) | (count))
 #define INCR_TRAINER_FAN_CLUB_COUNTER(count) (FANCLUB_BITFIELD += (count))
-#define CLEAR_TRAINER_FAN_CLUB_COUNTER       (FANCLUB_BITFIELD &= ~FANCLUB_COUNTER)
+#define CLEAR_TRAINER_FAN_CLUB_COUNTER (FANCLUB_BITFIELD &= ~FANCLUB_COUNTER)
 
 void ResetFanClub(void)
 {
@@ -3948,12 +3889,11 @@ void UpdateTrainerFanClubGameClear(void)
 u8 TryGainNewFanFromCounter(u8 incrementId)
 {
     static const u8 sCounterIncrements[] =
-    {
-        [FANCOUNTER_DEFEATED_DRAKE]    = 2,
-        [FANCOUNTER_BATTLED_AT_BASE]   = 1,
-        [FANCOUNTER_FINISHED_CONTEST]  = 2,
-        [FANCOUNTER_USED_BATTLE_TOWER] = 1
-    };
+        {
+            [FANCOUNTER_DEFEATED_DRAKE] = 2,
+            [FANCOUNTER_BATTLED_AT_BASE] = 1,
+            [FANCOUNTER_FINISHED_CONTEST] = 2,
+            [FANCOUNTER_USED_BATTLE_TOWER] = 1};
 
     if (VarGet(VAR_LILYCOVE_FAN_CLUB_STATE) == 2)
     {
@@ -3978,7 +3918,6 @@ u8 TryGainNewFanFromCounter(u8 incrementId)
     return GET_TRAINER_FAN_CLUB_COUNTER;
 }
 
-
 // Loop through the fan club members, and if theyre not a fan of the player there is a 50% chance for them to become a fan
 // Stops when a fan is gained
 // If no new fan was gained while looping, the last non-fan in the list becomes a fan
@@ -3986,16 +3925,15 @@ u8 TryGainNewFanFromCounter(u8 incrementId)
 static u16 PlayerGainRandomTrainerFan(void)
 {
     static const u8 sFanClubMemberIds[NUM_TRAINER_FAN_CLUB_MEMBERS] =
-    {
-        FANCLUB_MEMBER1,
-        FANCLUB_MEMBER2,
-        FANCLUB_MEMBER3,
-        FANCLUB_MEMBER4,
-        FANCLUB_MEMBER5,
-        FANCLUB_MEMBER6,
-        FANCLUB_MEMBER7,
-        FANCLUB_MEMBER8
-    };
+        {
+            FANCLUB_MEMBER1,
+            FANCLUB_MEMBER2,
+            FANCLUB_MEMBER3,
+            FANCLUB_MEMBER4,
+            FANCLUB_MEMBER5,
+            FANCLUB_MEMBER6,
+            FANCLUB_MEMBER7,
+            FANCLUB_MEMBER8};
 
     u8 i;
     u8 idx = 0;
@@ -4022,16 +3960,15 @@ static u16 PlayerGainRandomTrainerFan(void)
 static u16 PlayerLoseRandomTrainerFan(void)
 {
     static const u8 sFanClubMemberIds[NUM_TRAINER_FAN_CLUB_MEMBERS] =
-    {
-        FANCLUB_MEMBER1,
-        FANCLUB_MEMBER6,
-        FANCLUB_MEMBER7,
-        FANCLUB_MEMBER4,
-        FANCLUB_MEMBER3,
-        FANCLUB_MEMBER5,
-        FANCLUB_MEMBER8,
-        FANCLUB_MEMBER2
-    };
+        {
+            FANCLUB_MEMBER1,
+            FANCLUB_MEMBER6,
+            FANCLUB_MEMBER7,
+            FANCLUB_MEMBER4,
+            FANCLUB_MEMBER3,
+            FANCLUB_MEMBER5,
+            FANCLUB_MEMBER8,
+            FANCLUB_MEMBER2};
 
     u8 i;
     u8 idx = 0;
@@ -4149,7 +4086,7 @@ void BufferFanClubTrainerName(void)
     BufferFanClubTrainerName_(&gSaveBlock1Ptr->linkBattleRecords, whichLinkTrainer, whichNPCTrainer);
 #else
     BufferFanClubTrainerName_(whichLinkTrainer, whichNPCTrainer);
-#endif //FREE_LINK_BATTLE_RECORDS
+#endif // FREE_LINK_BATTLE_RECORDS
 }
 
 #if FREE_LINK_BATTLE_RECORDS == FALSE
@@ -4195,30 +4132,30 @@ static void BufferFanClubTrainerName_(u8 whichLinkTrainer, u8 whichNPCTrainer)
 {
     switch (whichNPCTrainer)
     {
-        case 0:
-            StringCopy(gStringVar1, gText_Wallace);
-            break;
-        case 1:
-            StringCopy(gStringVar1, gText_Steven);
-            break;
-        case 2:
-            StringCopy(gStringVar1, gText_Brawly);
-            break;
-        case 3:
-            StringCopy(gStringVar1, gText_Winona);
-            break;
-        case 4:
-            StringCopy(gStringVar1, gText_Phoebe);
-            break;
-        case 5:
-            StringCopy(gStringVar1, gText_Glacia);
-            break;
-        default:
-            StringCopy(gStringVar1, gText_Wallace);
-            break;
+    case 0:
+        StringCopy(gStringVar1, gText_Wallace);
+        break;
+    case 1:
+        StringCopy(gStringVar1, gText_Steven);
+        break;
+    case 2:
+        StringCopy(gStringVar1, gText_Brawly);
+        break;
+    case 3:
+        StringCopy(gStringVar1, gText_Winona);
+        break;
+    case 4:
+        StringCopy(gStringVar1, gText_Phoebe);
+        break;
+    case 5:
+        StringCopy(gStringVar1, gText_Glacia);
+        break;
+    default:
+        StringCopy(gStringVar1, gText_Wallace);
+        break;
     }
 }
-#endif //FREE_LINK_BATTLE_RECORDS
+#endif // FREE_LINK_BATTLE_RECORDS
 
 void UpdateTrainerFansAfterLinkBattle(void)
 {
@@ -4260,7 +4197,7 @@ void TrySkyBattle(void)
     }
     for (i = 0; i < CalculatePlayerPartyCount(); i++)
     {
-        struct Pokemon* pokemon = &gPlayerParty[i];
+        struct Pokemon *pokemon = &gPlayerParty[i];
         if (CanMonParticipateInSkyBattle(pokemon) && GetMonData(pokemon, MON_DATA_HP, NULL) > 0)
         {
             PreparePartyForSkyBattle();
@@ -4281,21 +4218,21 @@ void PreparePartyForSkyBattle(void)
 
     for (i = 0; i < partyCount; i++)
     {
-        struct Pokemon* pokemon = &gPlayerParty[i];
+        struct Pokemon *pokemon = &gPlayerParty[i];
 
         if (CanMonParticipateInSkyBattle(pokemon))
             participatingPokemonSlot += 1 << i;
         else
             ZeroMonData(pokemon);
     }
-    VarSet(B_VAR_SKY_BATTLE,participatingPokemonSlot);
+    VarSet(B_VAR_SKY_BATTLE, participatingPokemonSlot);
     CompactPartySlots();
 }
 
-void GetObjectPosition(u16* xPointer, u16* yPointer, u32 localId, u32 useTemplate)
+void GetObjectPosition(u16 *xPointer, u16 *yPointer, u32 localId, u32 useTemplate)
 {
     u32 objectId;
-    struct ObjectEvent* objEvent;
+    struct ObjectEvent *objEvent;
 
     if (useTemplate)
     {
@@ -4361,3 +4298,1104 @@ void GetCodeFeedback(void)
     else
         gSpecialVar_Result = 0;
 }
+
+// Pokemon Center Nurse Experience Service Functions
+static void Task_MoneyInputForExp(u8 taskId);
+static void PrintExpMoneyAmount(u8 windowId, u32 amount);
+static void PrintPokemonPreview(u8 windowId, u8 partySlot, u32 expAmount);
+static u8 CalculateLevelFromExperience(u16 species, u32 experience);
+static bool8 AdjustExpAccordingToDPadInput(u32 *expAmount, u32 max, u8 partySlot);
+
+// Level-up flow after granting EXP at the Nurse
+static void Task_NurseExpLevelUp(u8 taskId);
+// Nurse level-up flow declarations
+static void ContinueNurseLevelUpProcess(void);
+static void Task_WaitForMessageThenOpenSummary(u8 taskId);
+static void Task_WaitForMessageThenContinue(u8 taskId);
+static void Task_WaitForFadeAndContinueNurse(u8 taskId);
+static void CB2_ShowForgotMoveMessage(void);
+static void CB2_ReturnFromNurseSelectMove(void);
+static void CB2_ReturnFromNurseEvolution(void);
+static void FieldCB_ContinueNurseLevelUp(void);
+static void FieldCB_ShowForgotAndContinue(void);
+static void Task_WaitForFadeThenShowForgotMessage(u8 taskId);
+// Level-up stats summary helpers
+static void Task_NurseStartLevelUpStats(u8 taskId);
+static void Task_NurseLevelUpStatsPg1Wait(u8 taskId);
+static void Task_NurseLevelUpStatsPg2Wait(u8 taskId);
+static void Task_WaitForVramThenContinueScript(u8 taskId);
+static u8 Nurse_CreateLevelUpStatsWindow(void);
+static void Nurse_RemoveLevelUpStatsWindow(u8 windowId);
+static void Nurse_BufferMonStats(struct Pokemon *mon, u16 *buf);
+static u16 TryLearnPostEvolutionMove(struct Pokemon *mon, u8 startLevel, u8 currentLevel, bool8 firstMove);
+
+// State variables for nurse level-up process
+static EWRAM_DATA u8 sNursePartyId = 0;
+static EWRAM_DATA u16 sNurseMoveToLearn = MOVE_NONE;
+static EWRAM_DATA u8 sNurseCurrentLevel = 0;
+static EWRAM_DATA u8 sNurseTargetLevel = 0;
+static EWRAM_DATA bool8 sNurseFirstMoveFlag = FALSE;
+static EWRAM_DATA u16 sNurseForgottenMove = MOVE_NONE;
+static EWRAM_DATA u32 sNurseExpAmount = 0;
+static EWRAM_DATA bool8 sNurseEvolutionProcessed = FALSE;
+static EWRAM_DATA u8 sNurseEvolutionLevel = 0;
+static EWRAM_DATA bool8 sNursePostEvolutionMode = FALSE;
+// Stat summary buffers and window
+static EWRAM_DATA u16 sNurseStatsBefore[NUM_STATS] = {0};
+static EWRAM_DATA u16 sNurseStatsAfter[NUM_STATS] = {0};
+static EWRAM_DATA u16 sNurseLevelUpWindowId = 0;
+
+// Script context storage for proper resumption
+static EWRAM_DATA struct ScriptContext sNurseSavedScriptContext;
+
+// Evolution history tracking for multi-stage evolutions
+struct NurseEvolutionStage
+{
+    u16 species;
+    u8 startLevel;
+    u8 endLevel;
+};
+
+#define MAX_EVOLUTION_STAGES 10
+static EWRAM_DATA struct NurseEvolutionStage sNurseEvolutionHistory[MAX_EVOLUTION_STAGES];
+static EWRAM_DATA u8 sNurseEvolutionStageCount = 0;
+static EWRAM_DATA u8 sNurseCurrentEvolutionStage = 0;
+
+// Enhanced input handler for EXP amounts with level targeting
+static bool8 AdjustExpAccordingToDPadInput(u32 *expAmount, u32 max, u8 partySlot)
+{
+    u32 valBefore = *expAmount;
+    struct Pokemon *mon = &gPlayerParty[partySlot];
+    u16 species = GetMonData(mon, MON_DATA_SPECIES);
+    u8 currentLevel = GetMonData(mon, MON_DATA_LEVEL);
+    u32 currentExp = GetMonData(mon, MON_DATA_EXP);
+
+    if (JOY_REPEAT(DPAD_ANY) == DPAD_UP)
+    {
+        (*expAmount)++;
+        if (*expAmount > max)
+            *expAmount = 1;
+    }
+    else if (JOY_REPEAT(DPAD_ANY) == DPAD_DOWN)
+    {
+        (*expAmount)--;
+        if (*expAmount <= 0)
+            *expAmount = max;
+    }
+    else if (JOY_REPEAT(DPAD_ANY) == DPAD_RIGHT)
+    {
+        // Calculate what level we would reach with current amount + current exp
+        // Protect against overflow
+        u32 totalExpWithAmount;
+        if (*expAmount > UINT32_MAX - currentExp)
+            totalExpWithAmount = UINT32_MAX; // Clamp to max
+        else
+            totalExpWithAmount = currentExp + *expAmount;
+        u8 levelWithCurrentAmount = currentLevel;
+
+        // Find what level we'd be at with current amount
+        for (u8 level = currentLevel; level <= MAX_LEVEL; level++)
+        {
+            if (totalExpWithAmount >= gExperienceTables[gSpeciesInfo[species].growthRate][level])
+                levelWithCurrentAmount = level;
+            else
+                break;
+        }
+
+        // Set amount to reach the next level after that
+        u8 targetLevel = levelWithCurrentAmount + 1;
+        if (targetLevel > MAX_LEVEL || targetLevel < levelWithCurrentAmount) // Handle u8 overflow
+            targetLevel = MAX_LEVEL;
+
+        u32 targetLevelExp = gExperienceTables[gSpeciesInfo[species].growthRate][targetLevel];
+        if (targetLevelExp > currentExp)
+        {
+            u32 expNeeded = targetLevelExp - currentExp;
+            if (expNeeded <= max)
+                *expAmount = expNeeded;
+            else
+                *expAmount = max;
+        }
+        else
+        {
+            // Already at or past target level, just set to max
+            *expAmount = max;
+        }
+    }
+    else if (JOY_REPEAT(DPAD_ANY) == DPAD_LEFT)
+    {
+        // Calculate what level we would reach with current amount + current exp
+        // Protect against overflow
+        u32 totalExpWithAmount;
+        if (*expAmount > UINT32_MAX - currentExp)
+            totalExpWithAmount = UINT32_MAX; // Clamp to max
+        else
+            totalExpWithAmount = currentExp + *expAmount;
+        u8 levelWithCurrentAmount = currentLevel;
+
+        // Find what level we'd be at with current amount
+        for (u8 level = currentLevel; level <= MAX_LEVEL; level++)
+        {
+            if (totalExpWithAmount >= gExperienceTables[gSpeciesInfo[species].growthRate][level])
+                levelWithCurrentAmount = level;
+            else
+                break;
+        }
+
+        // Set amount to reach the previous level (decrease from current amount)
+        u8 targetLevel = levelWithCurrentAmount - 1;
+        if (targetLevel < currentLevel)
+        {
+            // Can't go below current level, just decrease amount
+            if (*expAmount > 1)
+                *expAmount = *expAmount - 1;
+            else
+                *expAmount = 1;
+        }
+        else
+        {
+            u32 targetLevelExp = gExperienceTables[gSpeciesInfo[species].growthRate][targetLevel];
+            if (targetLevelExp > currentExp)
+            {
+                u32 expNeeded = targetLevelExp - currentExp;
+                if (expNeeded > 0 && expNeeded <= max)
+                    *expAmount = expNeeded;
+                else
+                    *expAmount = 1; // Minimum amount
+            }
+            else
+            {
+                // Target level requires less exp than current, just set to minimum
+                *expAmount = 1;
+            }
+        }
+    }
+    else
+    {
+        return FALSE;
+    }
+
+    if (*expAmount == valBefore)
+    {
+        return FALSE;
+    }
+    else
+    {
+        PlaySE(SE_SELECT);
+        return TRUE;
+    }
+}
+
+// Processes the experience purchase transaction
+// Expects VAR_0x8005 to contain party slot (0-5) and sNurseExpAmount to contain money amount (also EXP granted)
+void GiveExpFromNurse(void)
+{
+
+    u32 cost = sNurseExpAmount;
+    u32 playerMoney = GetMoney(&gSaveBlock1Ptr->money);
+
+    // Check if player has enough money
+    if (playerMoney < cost)
+    {
+        gSpecialVar_Result = FALSE;
+        return;
+    }
+
+    // Remove the money
+    RemoveMoney(&gSaveBlock1Ptr->money, cost);
+
+    // Prepare EXP grant and clamp to current level cap
+    u8 partyId = gSpecialVar_0x8005;
+    struct Pokemon *mon = &gPlayerParty[partyId];
+    u16 species = GetMonData(mon, MON_DATA_SPECIES, NULL);
+    u32 growthRate = gSpeciesInfo[species].growthRate;
+    u32 currentExp = GetMonData(mon, MON_DATA_EXP, NULL);
+    u32 expToAdd = sNurseExpAmount;
+    u8 capLevel = GetCurrentLevelCap();
+    u32 capExp = gExperienceTables[growthRate][capLevel];
+
+    // Protect against overflow when adding experience
+    u32 newExp;
+    if (expToAdd > UINT32_MAX - currentExp)
+        newExp = UINT32_MAX; // Clamp to max to prevent overflow
+    else
+        newExp = currentExp + expToAdd;
+
+    if (newExp > capExp)
+        newExp = capExp;
+
+    // Set EXP immediately; levels/moves/evo are handled asynchronously
+    SetMonData(mon, MON_DATA_EXP, &newExp);
+
+    u8 currLevel = GetMonData(mon, MON_DATA_LEVEL, NULL);
+    u8 targetLevel = CalculateLevelFromExperience(species, newExp);
+    if (targetLevel > capLevel)
+        targetLevel = capLevel;
+
+    // Update the Pokémon's level to match the new experience
+    if (targetLevel > currLevel)
+    {
+        // Buffer stats BEFORE applying level changes for later summary
+        Nurse_BufferMonStats(mon, sNurseStatsBefore);
+
+        SetMonData(mon, MON_DATA_LEVEL, &targetLevel);
+        CalculateMonStats(mon);
+    }
+
+    if (targetLevel <= currLevel)
+    {
+        // Nothing to do beyond EXP change
+        gSpecialVar_Result = TRUE;
+        return;
+    }
+
+    // Start async level-up flow
+    sNurseSavedScriptContext = *ScriptContext_GetGlobal(); // Save current script context
+    ScriptContext_Stop();                                  // Stop script to prevent nurse dialog interference during level-up process
+    u8 taskId = CreateTask(Task_NurseExpLevelUp, 0);
+    gTasks[taskId].data[0] = 0;             // tState
+    gTasks[taskId].data[1] = partyId;       // tPartyId
+    gTasks[taskId].data[2] = currLevel + 1; // tCurrentLevel (start from next level)
+    gTasks[taskId].data[3] = targetLevel;   // tTargetLevel
+    gTasks[taskId].data[4] = TRUE;          // tFirstMoveFlag
+
+    // Set success result for when script resumes
+    gSpecialVar_Result = TRUE;
+}
+
+void MoneyInputForExp(void)
+{
+    u32 playerMoney = GetMoney(&gSaveBlock1Ptr->money);
+
+    // Start with minimum amount of $1, max is player's money or 1640000 (max exp needed from level 1 to 100)
+    u32 maxAmount = (playerMoney > 1640000) ? 1640000 : playerMoney;
+
+    if (maxAmount == 0)
+    {
+        gSpecialVar_Result = FALSE; // No money
+        return;
+    }
+
+    // Create task to handle money input
+    u8 taskId = CreateTask(Task_MoneyInputForExp, 0);
+    gTasks[taskId].data[0] = 1;                  // Current amount low (start with $1)
+    gTasks[taskId].data[1] = 0;                  // Current amount high
+    gTasks[taskId].data[2] = maxAmount & 0xFFFF; // Max amount low
+    gTasks[taskId].data[3] = maxAmount >> 16;    // Max amount high
+    gTasks[taskId].data[4] = 0;                  // Window ID (will be set)
+    gTasks[taskId].data[5] = 0;                  // Preview Window ID (will be set)
+    gTasks[taskId].data[6] = 0;                  // Mon Icon ID (will be set)
+}
+
+#define tAmountLow data[0]
+#define tAmountHigh data[1]
+#define tMaxAmountLow data[2]
+#define tMaxAmountHigh data[3]
+#define tWindowId data[4]
+#define tPreviewWindowId data[5]
+#define tMonIconId data[6]
+
+static void Task_MoneyInputForExp(u8 taskId)
+{
+    s16 *data = gTasks[taskId].data;
+
+    // Helper functions to work with 32-bit amounts in 16-bit slots
+    u32 currentAmount = ((u32)(u16)tAmountHigh << 16) | (u32)(u16)tAmountLow;
+    u32 maxAmount = ((u32)(u16)tMaxAmountHigh << 16) | (u32)(u16)tMaxAmountLow;
+
+    // Create windows if not created yet
+    if (tWindowId == 0)
+    {
+        // Main money input window
+        struct WindowTemplate template = {
+            .bg = 0,
+            .tilemapLeft = 1,
+            .tilemapTop = 1,
+            .width = 12,
+            .height = 4,
+            .paletteNum = 15,
+            .baseBlock = 1};
+
+        tWindowId = AddWindow(&template);
+        DrawStdWindowFrame(tWindowId, FALSE);
+        PrintExpMoneyAmount(tWindowId, currentAmount);
+        CopyWindowToVram(tWindowId, COPYWIN_FULL);
+
+        // Pokemon preview window
+        struct WindowTemplate previewTemplate = {
+            .bg = 0,
+            .tilemapLeft = 15,
+            .tilemapTop = 1,
+            .width = 12,
+            .height = 8,
+            .paletteNum = 15,
+            .baseBlock = 50};
+
+        tPreviewWindowId = AddWindow(&previewTemplate);
+        DrawStdWindowFrame(tPreviewWindowId, FALSE);
+        PrintPokemonPreview(tPreviewWindowId, gSpecialVar_0x8005, currentAmount);
+        CopyWindowToVram(tPreviewWindowId, COPYWIN_FULL);
+
+        // Create Pokemon icon sprite
+        struct Pokemon *mon = &gPlayerParty[gSpecialVar_0x8005];
+        u16 species = GetMonData(mon, MON_DATA_SPECIES_OR_EGG);
+        u32 personality = GetMonData(mon, MON_DATA_PERSONALITY);
+        LoadMonIconPalettePersonality(species, personality);
+        tMonIconId = CreateMonIcon(species, SpriteCB_MonIcon, 165, 30, 4, personality);
+        gSprites[tMonIconId].oam.priority = 0;
+    }
+
+    // Handle input with smart level targeting
+    if (AdjustExpAccordingToDPadInput(&currentAmount, maxAmount, gSpecialVar_0x8005))
+    {
+        // Update the task data with new amount
+        tAmountLow = currentAmount & 0xFFFF;
+        tAmountHigh = currentAmount >> 16;
+
+        // Amount changed, update displays
+        PrintExpMoneyAmount(tWindowId, currentAmount);
+        CopyWindowToVram(tWindowId, COPYWIN_GFX);
+
+        PrintPokemonPreview(tPreviewWindowId, gSpecialVar_0x8005, currentAmount);
+        CopyWindowToVram(tPreviewWindowId, COPYWIN_FULL);
+    }
+    else if (JOY_NEW(A_BUTTON))
+    {
+        // Confirm selection - store the 32-bit amount in our static variable
+        sNurseExpAmount = currentAmount;
+        gSpecialVar_0x8006 = 1; // Set to 1 to indicate success (can't store actual amount due to u16 limit)
+        gSpecialVar_Result = TRUE;
+
+        // Clean up
+        ClearStdWindowAndFrame(tWindowId, FALSE);
+        RemoveWindow(tWindowId);
+        ClearStdWindowAndFrame(tPreviewWindowId, FALSE);
+        RemoveWindow(tPreviewWindowId);
+        FreeAndDestroyMonIconSprite(&gSprites[tMonIconId]);
+        DestroyTask(taskId);
+        PlaySE(SE_SELECT);
+        ScriptContext_Enable();
+    }
+    else if (JOY_NEW(B_BUTTON))
+    {
+        // Cancel
+        sNurseExpAmount = 0;
+        gSpecialVar_0x8006 = 0;
+        gSpecialVar_Result = FALSE;
+
+        // Clean up
+        ClearStdWindowAndFrame(tWindowId, FALSE);
+        RemoveWindow(tWindowId);
+        ClearStdWindowAndFrame(tPreviewWindowId, FALSE);
+        RemoveWindow(tPreviewWindowId);
+        FreeAndDestroyMonIconSprite(&gSprites[tMonIconId]);
+        DestroyTask(taskId);
+        PlaySE(SE_SELECT);
+        ScriptContext_Enable();
+    }
+}
+
+static void PrintExpMoneyAmount(u8 windowId, u32 amount)
+{
+    static const u8 sText_MoneyToSpend[] = _("Give experience to POKéMON:");
+
+    u8 x;
+
+    // Print "Money to spend:" on first line
+    x = GetStringCenterAlignXOffset(FONT_NORMAL, sText_MoneyToSpend, 96);
+    AddTextPrinterParameterized(windowId, FONT_NORMAL, sText_MoneyToSpend, x, 1, TEXT_SKIP_DRAW, NULL);
+
+    // Print money amount on second line using the standard money printing function
+    PrintMoneyAmount(windowId, 24, 17, amount, TEXT_SKIP_DRAW);
+}
+
+static u8 CalculateLevelFromExperience(u16 species, u32 experience)
+{
+    s32 level = 1;
+
+    // Ensure species is valid
+    if (species == 0 || species > NUM_SPECIES)
+        species = SPECIES_BULBASAUR; // fallback to valid species
+
+    u8 growthRate = gSpeciesInfo[species].growthRate;
+
+    while (level <= MAX_LEVEL && gExperienceTables[growthRate][level] <= experience)
+        level++;
+
+    return level - 1;
+}
+
+static void PrintPokemonPreview(u8 windowId, u8 partySlot, u32 expAmount)
+{
+    static const u8 sText_CurrentLevel[] = _("Current: Lv");
+    static const u8 sText_NewLevel[] = _("New: Lv");
+
+    struct Pokemon *mon = &gPlayerParty[partySlot];
+    u16 species = GetMonData(mon, MON_DATA_SPECIES_OR_EGG);
+    u32 currentExp = GetMonData(mon, MON_DATA_EXP);
+
+    // Protect against overflow when adding experience for preview
+    u32 newExp;
+    if (expAmount > UINT32_MAX - currentExp)
+        newExp = UINT32_MAX; // Clamp to max to prevent overflow
+    else
+        newExp = currentExp + expAmount;
+
+    u8 currentLevel = GetMonData(mon, MON_DATA_LEVEL, NULL);
+    u8 newLevel = CalculateLevelFromExperience(species, newExp);
+
+    // Clear window content area
+    FillWindowPixelBuffer(windowId, PIXEL_FILL(1));
+
+    // Get Pokemon nickname into a buffer
+    u8 monName[POKEMON_NAME_LENGTH + 1];
+    GetMonData(mon, MON_DATA_NICKNAME, monName);
+    StringGet_Nickname(monName);
+
+    // Print Pokemon name (centered)
+    u8 x = GetStringCenterAlignXOffset(FONT_NORMAL, monName, 90);
+    AddTextPrinterParameterized(windowId, FONT_NORMAL, monName, x, 1, TEXT_SKIP_DRAW, NULL);
+
+    // Print current level
+    AddTextPrinterParameterized(windowId, FONT_NORMAL, sText_CurrentLevel, 8, 35, TEXT_SKIP_DRAW, NULL);
+    ConvertIntToDecimalStringN(gStringVar1, currentLevel, STR_CONV_MODE_LEFT_ALIGN, 3);
+    AddTextPrinterParameterized(windowId, FONT_NORMAL, gStringVar1, 72, 35, TEXT_SKIP_DRAW, NULL);
+
+    // Print new level
+    AddTextPrinterParameterized(windowId, FONT_NORMAL, sText_NewLevel, 8, 50, TEXT_SKIP_DRAW, NULL);
+    ConvertIntToDecimalStringN(gStringVar2, newLevel, STR_CONV_MODE_LEFT_ALIGN, 3);
+
+    // Use green color if level increased, otherwise normal color
+    if (newLevel > currentLevel)
+    {
+        // Create color array for green text
+        static const u8 sGreenText[] = {TEXT_COLOR_TRANSPARENT, TEXT_COLOR_GREEN, TEXT_COLOR_LIGHT_GRAY};
+        AddTextPrinterParameterized4(windowId, FONT_NORMAL, 72, 50, 0, 0, sGreenText, TEXT_SKIP_DRAW, gStringVar2);
+    }
+    else
+    {
+        AddTextPrinterParameterized(windowId, FONT_NORMAL, gStringVar2, 72, 50, TEXT_SKIP_DRAW, NULL);
+    }
+}
+
+// Refills the Potion Flask uses back to 3
+void RefillPotionFlask(void)
+{
+    if (CheckBagHasItem(ITEM_POTION_FLASK, 1))
+    {
+        VarSet(VAR_POTION_FLASK_USES, 3);
+    }
+}
+
+// Nurse level-up flow implementation
+
+#define tState data[0]
+#define tPartyId data[1]
+#define tCurrentLevel data[2]
+#define tTargetLevel data[3]
+#define tFirstMoveFlag data[4]
+
+static void Task_NurseExpLevelUp(u8 taskId)
+{
+    s16 *data = gTasks[taskId].data;
+
+    // Initialize state and start the level-up process
+    sNursePartyId = tPartyId;
+    sNurseCurrentLevel = tCurrentLevel;
+    sNurseTargetLevel = tTargetLevel;
+    sNurseFirstMoveFlag = TRUE;
+    sNurseEvolutionProcessed = FALSE; // Initialize evolution flag
+    sNursePostEvolutionMode = FALSE;  // Initialize post-evolution mode
+
+    // Initialize evolution history tracking
+    sNurseEvolutionStageCount = 0;
+    sNurseCurrentEvolutionStage = 0;
+
+    // Initialize window ID
+    sNurseLevelUpWindowId = WINDOW_NONE;
+
+    // Record the initial species as the first stage
+    struct Pokemon *mon = &gPlayerParty[sNursePartyId];
+    sNurseEvolutionHistory[0].species = GetMonData(mon, MON_DATA_SPECIES, NULL);
+    sNurseEvolutionHistory[0].startLevel = sNurseCurrentLevel;
+    sNurseEvolutionHistory[0].endLevel = sNurseTargetLevel; // Will be updated if evolution occurs
+    sNurseEvolutionStageCount = 1;
+
+    DestroyTask(taskId);
+    ContinueNurseLevelUpProcess();
+}
+
+static void Task_WaitForMessageThenOpenSummary(u8 taskId)
+{
+    if (GetFieldMessageBoxMode() == FIELD_MESSAGE_BOX_HIDDEN)
+    {
+        if (!gPaletteFade.active)
+        {
+            FreeAllWindowBuffers();
+            ShowSelectMovePokemonSummaryScreen(gPlayerParty, sNursePartyId, gPlayerPartyCount - 1, CB2_ReturnFromNurseSelectMove, sNurseMoveToLearn);
+            DestroyTask(taskId);
+        }
+    }
+}
+
+// Generic wait: when the field message box is closed, continue the nurse flow
+static void Task_WaitForMessageThenContinue(u8 taskId)
+{
+    if (GetFieldMessageBoxMode() == FIELD_MESSAGE_BOX_HIDDEN && !gPaletteFade.active)
+    {
+        DestroyTask(taskId);
+        ContinueNurseLevelUpProcess();
+    }
+}
+
+static void CB2_ShowForgotMoveMessage(void)
+{
+    // Clear any remaining UI state from summary screen
+    ResetSpriteData();
+    FreeAllSpritePalettes();
+    ClearScheduledBgCopiesToVram();
+
+    // Return to field and then show the "forgot and learned" message before continuing
+    gFieldCallback = FieldCB_ShowForgotAndContinue;
+    CB2_ReturnToField();
+}
+
+static void Task_WaitForFadeAndContinueNurse(u8 taskId)
+{
+    if (!gPaletteFade.active)
+    {
+        DestroyTask(taskId);
+        ContinueNurseLevelUpProcess();
+    }
+}
+
+static void FieldCB_ContinueNurseLevelUp(void)
+{
+    LockPlayerFieldControls();
+    Overworld_PlaySpecialMapMusic();
+    FadeInFromBlack();
+    // Create a task that waits for fade and then continues our nurse level-up process
+    CreateTask(Task_WaitForFadeAndContinueNurse, 10);
+}
+
+// Field callback used after forgetting a move: show message, wait, then continue
+static void FieldCB_ShowForgotAndContinue(void)
+{
+    LockPlayerFieldControls();
+    Overworld_PlaySpecialMapMusic();
+    FadeInFromBlack();
+    CreateTask(Task_WaitForFadeThenShowForgotMessage, 10);
+}
+
+static void Task_WaitForFadeThenShowForgotMessage(u8 taskId)
+{
+    if (!gPaletteFade.active)
+    {
+        // Prepare and show "forgot X and learned Y" message
+        struct Pokemon *mon = &gPlayerParty[sNursePartyId];
+        GetMonNickname(mon, gStringVar1);
+        StringCopy(gStringVar2, GetMoveName(sNurseMoveToLearn));
+        if (sNurseForgottenMove != MOVE_NONE)
+            StringCopy(gStringVar3, GetMoveName(sNurseForgottenMove));
+        else
+            StringCopy(gStringVar3, gText_ThreeDashes); // Fallback, should not happen
+
+        StringExpandPlaceholders(gStringVar4, gText_MoveRelearnerPkmnForgotMoveAndLearnedNew);
+        ShowFieldMessage(gStringVar4);
+
+        // Clear forgotten move buffer now that message is queued
+        sNurseForgottenMove = MOVE_NONE;
+
+        // Wait for message to close, then continue the nurse process
+        DestroyTask(taskId);
+        CreateTask(Task_WaitForMessageThenContinue, 0);
+    }
+}
+
+static void Task_ShowLevelUpAnotherDialog(u8 taskId)
+{
+    ScriptContext_ContinueScript(&sNurseSavedScriptContext);
+    DestroyTask(taskId);
+}
+
+// Wait for VRAM update to complete before continuing script
+static void Task_WaitForVramThenContinueScript(u8 taskId)
+{
+    s16 *data = gTasks[taskId].data;
+
+    // Wait for window to actually be cleared and VRAM updated
+    data[0]++; // frame counter
+
+    // Check if window is properly cleared and enough frames have passed for visual update
+    if (sNurseLevelUpWindowId == WINDOW_NONE && data[0] >= 2)
+    {
+        CreateTask(Task_ShowLevelUpAnotherDialog, 0);
+        DestroyTask(taskId);
+    }
+    // Safety timeout - continue after 10 frames even if window ID isn't cleared
+    else if (data[0] >= 10)
+    {
+        CreateTask(Task_ShowLevelUpAnotherDialog, 0);
+        DestroyTask(taskId);
+    }
+}
+
+// Helper function to check for moves the evolved Pokemon should learn from evolution level to current level
+static u16 TryLearnPostEvolutionMove(struct Pokemon *mon, u8 startLevel, u8 currentLevel, bool8 firstMove)
+{
+    static u8 sCurrentStage = 0;
+    static u16 sPostEvoLearningMoveIndex = 0;
+
+    if (firstMove)
+    {
+        // Initialize: start checking from the first evolution stage
+        sCurrentStage = 0;
+        sPostEvoLearningMoveIndex = 0;
+    }
+
+    // Check moves for each evolution stage that the Pokemon went through
+    while (sCurrentStage < sNurseEvolutionStageCount)
+    {
+        u16 stageSpecies = sNurseEvolutionHistory[sCurrentStage].species;
+        u8 stageStartLevel = sNurseEvolutionHistory[sCurrentStage].startLevel;
+        u8 stageEndLevel = sNurseEvolutionHistory[sCurrentStage].endLevel;
+
+        // Determine the level range for this stage within our target range
+        u8 checkStartLevel = stageStartLevel > startLevel ? stageStartLevel : startLevel;
+        u8 checkEndLevel = stageEndLevel < currentLevel ? stageEndLevel : currentLevel;
+
+        // Only check this stage if there's a valid level range
+        if (checkStartLevel <= checkEndLevel)
+        {
+            const struct LevelUpMove *learnset = GetSpeciesLevelUpLearnset(stageSpecies);
+
+            if (firstMove)
+            {
+                // Find the first move at or after the check start level for this stage
+                while (learnset[sPostEvoLearningMoveIndex].move != LEVEL_UP_MOVE_END)
+                {
+                    if (learnset[sPostEvoLearningMoveIndex].level >= checkStartLevel &&
+                        learnset[sPostEvoLearningMoveIndex].level <= checkEndLevel)
+                    {
+                        break;
+                    }
+                    sPostEvoLearningMoveIndex++;
+                }
+                firstMove = FALSE; // Only initialize once
+            }
+
+            // Find the next move to learn in this stage's range
+            while (learnset[sPostEvoLearningMoveIndex].move != LEVEL_UP_MOVE_END)
+            {
+                if (learnset[sPostEvoLearningMoveIndex].level >= checkStartLevel &&
+                    learnset[sPostEvoLearningMoveIndex].level <= checkEndLevel)
+                {
+                    u16 move = learnset[sPostEvoLearningMoveIndex].move;
+                    sPostEvoLearningMoveIndex++; // Move to next for subsequent calls
+
+                    // Check if Pokemon already knows this move
+                    if (MonKnowsMove(mon, move))
+                        return MON_ALREADY_KNOWS_MOVE;
+
+                    // Try to give the move to the Pokemon
+                    u16 result = GiveMoveToMon(mon, move);
+                    if (result == MON_HAS_MAX_MOVES)
+                    {
+                        gMoveToLearn = move;
+                        return MON_HAS_MAX_MOVES;
+                    }
+
+                    // Successfully learned the move
+                    return move;
+                }
+                sPostEvoLearningMoveIndex++;
+            }
+        }
+
+        // Move to next evolution stage
+        sCurrentStage++;
+        sPostEvoLearningMoveIndex = 0; // Reset move index for next stage
+    }
+
+    return MOVE_NONE; // No more moves to learn from any stage
+}
+static void ContinueNurseLevelUpProcess(void)
+{
+    struct Pokemon *mon = &gPlayerParty[sNursePartyId];
+
+    // Check if we've processed all levels first (before checking messages)
+    if (sNurseCurrentLevel > sNurseTargetLevel)
+    {
+        // All levels complete, try evolution
+        bool32 canStopEvo = TRUE;
+        u16 targetSpecies = GetEvolutionTargetSpecies(mon, EVO_MODE_NORMAL, ITEM_NONE, NULL, &canStopEvo, CHECK_EVO);
+        if (targetSpecies != SPECIES_NONE)
+        {
+            gCB2_AfterEvolution = CB2_ReturnFromNurseEvolution;
+            BeginEvolutionScene(mon, targetSpecies, canStopEvo, sNursePartyId);
+        }
+        else
+        {
+            // FINISH - All level-up processing complete
+            // Buffer AFTER stats for the summary window
+            Nurse_BufferMonStats(mon, sNurseStatsAfter);
+
+            // Only show stats summary if there were actual changes
+            bool8 hasStatChanges = FALSE;
+            for (u8 i = 0; i < NUM_STATS; i++)
+            {
+                if (sNurseStatsAfter[i] != sNurseStatsBefore[i])
+                {
+                    hasStatChanges = TRUE;
+                    break;
+                }
+            }
+
+            if (hasStatChanges)
+            {
+                // Start two-page level-up stats summary, then continue to the dialog
+                CreateTask(Task_NurseStartLevelUpStats, 0);
+            }
+            else
+            {
+                // No stat changes, but still wait a moment before continuing script
+                CreateTask(Task_WaitForVramThenContinueScript, 0);
+            }
+        }
+        return;
+    }
+
+    // Try to learn a move at the current level
+    u16 result;
+    if (sNursePostEvolutionMode)
+    {
+        // In post-evolution mode: check for moves from evolution level to current level
+        result = TryLearnPostEvolutionMove(mon, sNurseEvolutionLevel, sNurseCurrentLevel, sNurseFirstMoveFlag);
+    }
+    else
+    {
+        // Normal mode: check for moves at current level only
+        result = MonTryLearningNewMoveAtLevel(mon, sNurseFirstMoveFlag, sNurseCurrentLevel);
+    }
+
+    if (result == MOVE_NONE)
+    {
+        if (sNursePostEvolutionMode)
+        {
+            // Finished learning post-evolution moves, return to normal mode
+            sNursePostEvolutionMode = FALSE;
+            sNurseFirstMoveFlag = TRUE;
+            // Continue checking for normal moves at this level
+            ContinueNurseLevelUpProcess();
+            return;
+        }
+
+        // No more moves at this level for current species
+        // Check for evolution only if we haven't processed evolution for this level yet
+        if (!sNurseEvolutionProcessed)
+        {
+            bool32 canStopEvo = TRUE;
+            u16 targetSpecies = GetEvolutionTargetSpecies(mon, EVO_MODE_NORMAL, ITEM_NONE, NULL, &canStopEvo, CHECK_EVO);
+            if (targetSpecies != SPECIES_NONE)
+            {
+                // Mark evolution as processed for this level
+                sNurseEvolutionProcessed = TRUE;
+                sNurseEvolutionLevel = sNurseCurrentLevel; // Remember at what level evolution happened
+
+                // Update evolution history: close current stage and start new one
+                if (sNurseEvolutionStageCount > 0)
+                {
+                    // End the current stage at the level before evolution
+                    sNurseEvolutionHistory[sNurseEvolutionStageCount - 1].endLevel = sNurseCurrentLevel - 1;
+                }
+
+                // Add new evolution stage (will be filled after evolution completes)
+                if (sNurseEvolutionStageCount < MAX_EVOLUTION_STAGES)
+                {
+                    sNurseEvolutionHistory[sNurseEvolutionStageCount].species = targetSpecies;
+                    sNurseEvolutionHistory[sNurseEvolutionStageCount].startLevel = sNurseCurrentLevel;
+                    sNurseEvolutionHistory[sNurseEvolutionStageCount].endLevel = sNurseTargetLevel;
+                    sNurseEvolutionStageCount++;
+                }
+
+                // Evolution available at this level - trigger it
+                gCB2_AfterEvolution = CB2_ReturnFromNurseEvolution;
+                BeginEvolutionScene(mon, targetSpecies, canStopEvo, sNursePartyId);
+                return;
+            }
+        }
+
+        // No evolution available or already processed - proceed to next level
+        sNurseCurrentLevel++;
+        sNurseFirstMoveFlag = TRUE;
+        sNurseEvolutionProcessed = FALSE; // Reset for next level
+        // Continue immediately to next level
+        ContinueNurseLevelUpProcess();
+    }
+    else if (result == MON_ALREADY_KNOWS_MOVE)
+    {
+        sNurseFirstMoveFlag = FALSE;
+        // Continue checking for more moves at same level
+        ContinueNurseLevelUpProcess();
+    }
+    else if (result == MON_HAS_MAX_MOVES)
+    {
+        // Show "trying to learn" message first
+        GetMonNickname(mon, gStringVar1);
+        StringCopy(gStringVar2, GetMoveName(gMoveToLearn));
+        StringExpandPlaceholders(gStringVar4, gText_MoveRelearnerPkmnTryingToLearnMove);
+        ShowFieldMessage(gStringVar4);
+        sNurseMoveToLearn = gMoveToLearn;
+        sNurseFirstMoveFlag = FALSE;
+
+        // Wait for message, then open summary
+        CreateTask(Task_WaitForMessageThenOpenSummary, 0);
+    }
+    else
+    {
+        // Learned the move successfully; show message
+        GetMonNickname(mon, gStringVar1);
+        StringCopy(gStringVar2, GetMoveName(result));
+        StringExpandPlaceholders(gStringVar4, gText_PkmnLearnedMove3);
+        ShowFieldMessage(gStringVar4);
+        sNurseFirstMoveFlag = FALSE;
+        // Wait for message, then continue
+        CreateTask(Task_WaitForMessageThenContinue, 0);
+    }
+}
+
+// ===== Level-up stats summary window (field) =====
+static void Nurse_BufferMonStats(struct Pokemon *mon, u16 *buf)
+{
+    // Order must match STAT_* indexes used by DrawLevelUpWindowPg1/2
+    buf[STAT_HP] = GetMonData(mon, MON_DATA_MAX_HP);
+    buf[STAT_ATK] = GetMonData(mon, MON_DATA_ATK);
+    buf[STAT_DEF] = GetMonData(mon, MON_DATA_DEF);
+    buf[STAT_SPATK] = GetMonData(mon, MON_DATA_SPATK);
+    buf[STAT_SPDEF] = GetMonData(mon, MON_DATA_SPDEF);
+    buf[STAT_SPEED] = GetMonData(mon, MON_DATA_SPEED);
+}
+
+static u8 Nurse_CreateLevelUpStatsWindow(void)
+{
+    // Field-safe window (BG 0 with standard frame/palette)
+    struct WindowTemplate template = {
+        .bg = 0,
+        .tilemapLeft = 14,
+        .tilemapTop = 2,
+        .width = 14,
+        .height = 11,
+        .paletteNum = 15,
+        .baseBlock = 100,
+    };
+
+    u8 windowId = AddWindow(&template);
+    if (windowId == WINDOW_NONE)
+        return WINDOW_NONE;
+
+    DrawStdWindowFrame(windowId, FALSE);
+    return windowId;
+}
+
+static void Nurse_RemoveLevelUpStatsWindow(u8 windowId)
+{
+    if (windowId != WINDOW_NONE)
+    {
+        ClearStdWindowAndFrame(windowId, FALSE);
+        RemoveWindow(windowId);
+    }
+}
+
+static void Task_NurseStartLevelUpStats(u8 taskId)
+{
+    // Clean up any leftover message state before showing stats
+    HideFieldMessageBox();
+
+    // Create and draw page 1 (stat deltas)
+    sNurseLevelUpWindowId = Nurse_CreateLevelUpStatsWindow();
+    if (sNurseLevelUpWindowId == WINDOW_NONE)
+    {
+        // Window creation failed, wait before continuing script
+        gTasks[taskId].func = Task_WaitForVramThenContinueScript;
+        return;
+    }
+
+    DrawLevelUpWindowPg1(sNurseLevelUpWindowId, sNurseStatsBefore, sNurseStatsAfter, TEXT_COLOR_WHITE, TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_GRAY);
+    CopyWindowToVram(sNurseLevelUpWindowId, COPYWIN_FULL);
+    ScheduleBgCopyTilemapToVram(0);
+
+    // Optional: play level up fanfare for feedback
+    PlayFanfareByFanfareNum(FANFARE_LEVEL_UP);
+    gTasks[taskId].func = Task_NurseLevelUpStatsPg1Wait;
+}
+static void Task_NurseLevelUpStatsPg1Wait(u8 taskId)
+{
+    if (WaitFanfare(FALSE) && (JOY_NEW(A_BUTTON) || JOY_NEW(B_BUTTON)))
+    {
+        PlaySE(SE_SELECT);
+        DrawLevelUpWindowPg2(sNurseLevelUpWindowId, sNurseStatsAfter, TEXT_COLOR_WHITE, TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_GRAY);
+        CopyWindowToVram(sNurseLevelUpWindowId, COPYWIN_FULL);
+        ScheduleBgCopyTilemapToVram(0);
+        gTasks[taskId].func = Task_NurseLevelUpStatsPg2Wait;
+    }
+}
+
+static void Task_NurseLevelUpStatsPg2Wait(u8 taskId)
+{
+    if (JOY_NEW(A_BUTTON) || JOY_NEW(B_BUTTON))
+    {
+        PlaySE(SE_SELECT);
+        Nurse_RemoveLevelUpStatsWindow(sNurseLevelUpWindowId);
+        sNurseLevelUpWindowId = WINDOW_NONE; // Clear reference
+        ScheduleBgCopyTilemapToVram(0);
+
+        // Wait for VRAM update before continuing to script
+        gTasks[taskId].func = Task_WaitForVramThenContinueScript;
+    }
+}
+
+static void CB2_ReturnFromNurseSelectMove(void)
+{
+    u8 slot = GetMoveSlotToReplace();
+
+    if (slot != MAX_MON_MOVES)
+    {
+        struct Pokemon *mon = &gPlayerParty[sNursePartyId];
+        u16 move = GetMonData(mon, MON_DATA_MOVE1 + slot);
+        if (!IsMoveHM(move))
+        {
+            // Replace the move
+            RemoveMonPPBonus(mon, slot);
+            SetMonMoveSlot(mon, sNurseMoveToLearn, slot);
+            CalculateMonStats(mon);
+            sNurseForgottenMove = move;
+
+            // Show the "forgot X and learned Y" message
+            SetMainCallback2(CB2_ShowForgotMoveMessage);
+            return;
+        }
+    }
+
+    // No move was replaced - continue without message
+    gFieldCallback = FieldCB_ContinueNurseLevelUp;
+    SetMainCallback2(CB2_ReturnToField);
+}
+
+static void CB2_ReturnFromNurseEvolution(void)
+{
+    // Evolution scene complete (either evolved or cancelled)
+    // Enter post-evolution mode to check for moves from evolution level to current level
+    sNursePostEvolutionMode = TRUE;
+    sNurseFirstMoveFlag = TRUE;
+
+    // Set field callback to handle fade-in and continue the level-up process
+    gFieldCallback = FieldCB_ContinueNurseLevelUp;
+    CB2_ReturnToField();
+}
+
+void TryPlaceWildMoneyRecoveryItem(void)
+{
+    // Only check if there's money to recover
+    if (VarGet(VAR_WILD_MONEY_LOST) == 0)
+        return;
+
+    // Check if we're on the correct map where money was lost
+    if (gSaveBlock1Ptr->location.mapGroup != VarGet(VAR_WILD_MONEY_LOST_MAP_GROUP) ||
+        gSaveBlock1Ptr->location.mapNum != VarGet(VAR_WILD_MONEY_LOST_MAP_NUM))
+        return;
+
+    // Get the stored whiteout position (stored without MAP_OFFSET)
+    s16 x = VarGet(VAR_WILD_MONEY_LOST_X);
+    s16 y = VarGet(VAR_WILD_MONEY_LOST_Y);
+
+    // Check if position is already occupied by another object
+    if (CheckObjectAtXY(x + MAP_OFFSET, y + MAP_OFFSET))
+        return; // Don't place on occupied tiles
+
+    // Find a template slot within the current map's template count that we can reuse.
+    // Prefer a slot that is either empty (LOCALID_NONE) or flagged (so it wouldn't spawn).
+    struct ObjectEventTemplate *templates = gSaveBlock1Ptr->objectEventTemplates;
+    u8 count = (gMapHeader.events != NULL) ? gMapHeader.events->objectEventCount : 0;
+    s32 idx = -1;
+    s32 i;
+
+    for (i = 0; i < count; i++)
+    {
+        if (templates[i].localId == LOCALID_NONE)
+        {
+            idx = i;
+            break;
+        }
+        if (templates[i].flagId != 0 && FlagGet(templates[i].flagId))
+        {
+            idx = i;
+            break;
+        }
+    }
+
+    if (idx < 0)
+    {
+        // Fallback: if no reusable slot and we have space, try to add to the end
+        if (count < OBJECT_EVENT_TEMPLATES_COUNT)
+        {
+            idx = count;
+            // Increment the count to include our new object
+            if (gMapHeader.events != NULL)
+                ((struct MapEvents *)gMapHeader.events)->objectEventCount++;
+        }
+        else
+        {
+            return; // No available slots
+        }
+    }
+
+    // Ensure we have a valid, non-reserved localId if we grabbed an empty slot
+    if (templates[idx].localId == LOCALID_NONE)
+    {
+        // Gather used ids in the active template range
+        bool8 used[256] = {0};
+        for (i = 0; i < count; i++)
+            used[templates[i].localId] = TRUE;
+
+        // Pick the first safe id in [1, 126] (avoid reserved like CAMERA=127, PLAYER=255, etc.)
+        for (i = 1; i < LOCALID_CAMERA; i++)
+        {
+            if (!used[i])
+            {
+                templates[idx].localId = i;
+                break;
+            }
+        }
+        // If none found, keep 0 (object will be non-interactable); in that case, bail.
+        if (templates[idx].localId == LOCALID_NONE)
+            return;
+    }
+
+    // Configure the template as an item ball for money recovery
+    templates[idx].graphicsId = OBJ_EVENT_GFX_ITEM_BALL;
+    templates[idx].kind = OBJ_KIND_NORMAL;
+    templates[idx].x = x;         // Use the stored whiteout position
+    templates[idx].y = y;         // Use the stored whiteout position
+    templates[idx].elevation = 0; // ground level
+    templates[idx].movementType = MOVEMENT_TYPE_NONE;
+    templates[idx].movementRangeX = 0;
+    templates[idx].movementRangeY = 0;
+    templates[idx].trainerType = TRAINER_TYPE_NONE;
+    templates[idx].trainerRange_berryTreeId = 0;
+    templates[idx].script = WildMoneyRecovery_EventScript; // Money recovery script
+    templates[idx].flagId = 0;                             // ensure it's visible
+
+    // Immediately spawn the object so it appears without requiring a map reload
+    SpawnSpecialObjectEventParameterized(OBJ_EVENT_GFX_ITEM_BALL,
+                                         MOVEMENT_TYPE_NONE,
+                                         templates[idx].localId,
+                                         x + MAP_OFFSET,
+                                         y + MAP_OFFSET,
+                                         0); // elevation
+}
+
+#undef tState
+#undef tPartyId
+#undef tCurrentLevel
+#undef tTargetLevel
+#undef tFirstMoveFlag

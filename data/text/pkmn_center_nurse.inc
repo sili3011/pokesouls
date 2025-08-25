@@ -1,9 +1,25 @@
 gText_WouldYouLikeToRestYourPkmn::
 	.string "Hello, and welcome to\n"
 	.string "the POKéMON CENTER.\p"
-	.string "We restore your tired POKéMON\n"
-	.string "to full health.\p"
-	.string "Would you like to rest your POKéMON?$"
+	.string "We can restore your tired\n"
+	.string "POKéMON to full health\p"
+	.string "or help you level them up.$"
+
+gText_LevelUpService::
+	.string "Which POKéMON would you like\n"
+	.string "to level up?$"
+
+gText_LevelUpAnotherPokemon::
+	.string "Would you like to level up\n"
+	.string "another POKéMON?$"
+
+gText_HowMuchMoneyForExp::
+	.string "How much would you like\n"
+	.string "to spend on experience?$"
+
+gText_NotEnoughMoney::
+	.string "I'm sorry, but you don't have\n"
+	.string "enough for that.$"
 
 gText_IllTakeYourPkmn::
 	.string "Okay, I'll take your POKéMON\n"

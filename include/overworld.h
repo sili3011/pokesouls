@@ -24,7 +24,7 @@
 #define MOVEMENT_MODE_FROZEN 1
 #define MOVEMENT_MODE_SCRIPTED 2
 
-#define SKIP_OBJECT_EVENT_LOAD  1
+#define SKIP_OBJECT_EVENT_LOAD 1
 
 // trigger a time-of-day blend once
 #define HOURS_BLEND_ONCE 25
@@ -77,6 +77,7 @@ void SetGameStat(u8 index, u32 value);
 void ApplyNewEncryptionKeyToGameStats(u32 newKey);
 void LoadObjEventTemplatesFromHeader(void);
 void LoadSaveblockObjEventScripts(void);
+void TryPlaceWildMoneyRecoveryItem(void);
 void SetObjEventTemplateCoords(u8 localId, s16 x, s16 y);
 void SetObjEventTemplateMovementType(u8 localId, u8 movementType);
 const struct MapLayout *GetMapLayout(u16 mapLayoutId);
