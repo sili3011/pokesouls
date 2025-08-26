@@ -9,6 +9,7 @@
 #include "field_effect_helpers.h"
 #include "field_player_avatar.h"
 #include "field_screen_effect.h"
+#include "field_specials.h"
 #include "field_weather.h"
 #include "fieldmap.h"
 #include "fldeff.h"
@@ -1020,6 +1021,7 @@ static void PokecenterHealEffect_Init(struct Task *task)
 {
     // Reset all trainer defeat flags when healing at a Pokecenter
     ResetAllTrainerFlags();
+    RefillPotionFlask();
     task->tState++;
     task->tBallSpriteId = CreateGlowingPokeballsEffect(task->tNumMons, task->tFirstBallX, task->tFirstBallY, TRUE);
     task->tMonitorSpriteId = CreatePokecenterMonitorSprite(task->tMonitorX, task->tMonitorY);

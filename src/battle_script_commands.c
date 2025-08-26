@@ -8854,6 +8854,7 @@ static void Cmd_getmoneyreward(void)
 
         RemoveMoney(&gSaveBlock1Ptr->money, money);
         ResetAllTrainerFlags();
+        RefillPotionFlask();
     }
 
     PREPARE_WORD_NUMBER_BUFFER(gBattleTextBuff1, 5, money);
